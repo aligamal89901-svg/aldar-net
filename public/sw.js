@@ -1,5 +1,5 @@
-const CACHE = "aldar-net-v3";
-const ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
+const CACHE = "aldar-net-v4";
+const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)));
@@ -29,10 +29,10 @@ self.addEventListener("fetch", (event) => {
       fetch(event.request)
         .then((response) => {
           const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put("/index.html", copy));
+          caches.open(CACHE).then((cache) => cache.put("./index.html", copy));
           return response;
         })
-        .catch(() => caches.match("/index.html"))
+        .catch(() => caches.match("./index.html"))
     );
     return;
   }
@@ -57,15 +57,16 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const target = new URL("#notifications", self.location.href).href;
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       for (const client of list) {
         if ("focus" in client) {
-          client.navigate("/#notifications");
+          client.navigate(target);
           return client.focus();
         }
       }
-      return clients.openWindow("/#notifications");
+      return clients.openWindow(target);
     })
   );
 });

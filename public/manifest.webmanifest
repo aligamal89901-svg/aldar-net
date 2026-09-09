@@ -4,15 +4,15 @@
   "description": "خدمات الشبكة بسهولة وسرعة",
   "lang": "ar",
   "dir": "rtl",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#f5f7fb",
   "theme_color": "#0891b2",
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "icon.svg",
       "sizes": "any",
       "purpose": "any maskable"
     }
