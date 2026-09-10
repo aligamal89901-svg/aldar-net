@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { House, Info, Phone, CreditCard, Package } from "lucide-react";
+import { House, Info, Phone, CreditCard, Package, Settings } from "lucide-react";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import Home from "./pages/Home";
@@ -9,12 +9,17 @@ import Contact from "./pages/Contact";
 import CardExpiry from "./pages/CardExpiry";
 import Plans from "./pages/Plans";
 import Notifications from "./pages/Notifications";
+import AdminPanel from "./pages/AdminPanel";
+import AuthGuard from "./components/AuthGuard";
 import { startReminderScheduler } from "./utils/reminder";
 
 function App() {
-  const [page, setPage] = useState(() =>
-    window.location.hash === "#notifications" ? "notifications" : "home"
-  );
+  const [page, setPage] = useState(() => {
+    const hash = window.location.hash.slice(1);
+    if (hash === "notifications") return "notifications";
+    if (hash === "admin") return "admin";
+    return "home";
+  });
   const [returnTo, setReturnTo] = useState("home");
 
   const pageRef = useRef(page);
@@ -22,9 +27,13 @@ function App() {
 
   useEffect(() => {
     const onHash = () => {
-      if (window.location.hash === "#notifications" && pageRef.current !== "notifications") {
+      const hash = window.location.hash.slice(1);
+      if (hash === "notifications" && pageRef.current !== "notifications") {
         setReturnTo(pageRef.current);
         setPage("notifications");
+      } else if (hash === "admin" && pageRef.current !== "admin") {
+        setReturnTo(pageRef.current);
+        setPage("admin");
       }
     };
     window.addEventListener("hashchange", onHash);
@@ -45,6 +54,16 @@ function App() {
     setPage(returnTo);
   };
 
+  const openAdmin = () => {
+    if (pageRef.current !== "admin") setReturnTo(pageRef.current);
+    setPage("admin");
+  };
+
+  const backFromAdmin = () => {
+    window.location.hash = "";
+    setPage(returnTo);
+  };
+
   const tabs = [
     { id: "home", label: "الرئيسية", icon: House, component: Home },
     { id: "plans", label: "الفئات", icon: Package, component: Plans },
@@ -58,7 +77,7 @@ function App() {
 
   return (
     <div className="flex min-h-screen flex-col pb-24">
-      <Header onBellClick={openNotifications} />
+      <Header onBellClick={openNotifications} onSettingsClick={openAdmin} />
 
       <AnimatePresence mode="wait">
         <motion.div
@@ -71,6 +90,10 @@ function App() {
         >
           {page === "notifications" ? (
             <Notifications onBack={backFromNotifications} />
+          ) : page === "admin" ? (
+            <AuthGuard>
+              <AdminPanel onBack={backFromAdmin} />
+            </AuthGuard>
           ) : (
             <CurrentComponent onNavigate={setPage} />
           )}

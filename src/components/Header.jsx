@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Bell } from "lucide-react";
+import { Bell, Settings } from "lucide-react";
 import LottieIcon from "./LottieIcon";
 import logoAnim from "../assets/lottie/logo.json";
 import { unreadCount } from "../utils/notifyStore";
 
-function Header({ onBellClick }) {
+function Header({ onBellClick, onSettingsClick }) {
   const [unread, setUnread] = useState(unreadCount());
 
   useEffect(() => {
@@ -35,6 +35,13 @@ function Header({ onBellClick }) {
               {unread}
             </span>
           ) : null}
+        </button>
+
+        <button
+          onClick={onSettingsClick}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-ink/8 bg-white text-muted shadow-[0_4px_14px_rgba(15,23,42,0.04)] transition active:scale-[0.95]"
+        >
+          <Settings size={18} />
         </button>
       </div>
     </header>
