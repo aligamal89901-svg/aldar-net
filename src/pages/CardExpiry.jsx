@@ -108,16 +108,14 @@ function CardExpiry() {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: "easeOut" }}
-        className="mb-3 flex items-center gap-4 rounded-2xl border border-ink/8 bg-white p-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
+        className="relative mb-3 overflow-hidden rounded-3xl border border-brand/25 bg-gradient-to-b from-brand/10 to-white p-5 text-center"
       >
-        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-brand/10">
-          <LottieIcon data={mycardHeroAnim} className="h-16 w-16" />
+        <div className="mx-auto flex h-28 w-28 items-center justify-center">
+          <LottieIcon data={mycardHeroAnim} className="h-28 w-28" />
         </div>
-        <div>
-          <div className="text-base font-extrabold text-ink">تابع كرتك أولًا بأول</div>
-          <div className="mt-1 text-xs leading-6 text-muted">
-            احفظ تاريخ الانتهاء وحدّد توقيت التذكير، والتطبيق يتكفل بالباقي.
-          </div>
+        <div className="mt-2 text-base font-extrabold text-ink">تابع كرتك أولًا بأول</div>
+        <div className="mt-1 text-[11px] leading-6 text-muted">
+          احفظ تاريخ الانتهاء وحدّد توقيت التذكير، والتطبيق يتكفل بالباقي.
         </div>
       </motion.section>
 
@@ -206,32 +204,31 @@ function CardExpiry() {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.28, duration: 0.35, ease: "easeOut" }}
-        className="mt-3 rounded-2xl border border-ink/8 bg-white p-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
+        className="mt-3 rounded-3xl border border-ink/8 bg-white p-5 text-center shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
       >
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-sm font-bold text-ink">
-            <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-brand/10">
-              <LottieIcon data={mycardBellAnim} className="h-7 w-7" />
-            </span>
-            تذكير الانتهاء
-          </div>
+        <div className="mx-auto flex h-20 w-20 items-center justify-center">
+          <LottieIcon data={mycardBellAnim} className="h-20 w-20" />
+        </div>
+        <div className="mt-1 flex items-center justify-center gap-2 text-sm font-extrabold text-ink">
+          تذكير الانتهاء
           {permission === "granted" ? (
             <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-600">
               <CheckCircle2 size={13} /> مفعّل
             </span>
-          ) : (
-            <button
-              onClick={enable}
-              className="rounded-xl border border-brand/30 bg-brand/10 px-4 py-2 text-xs font-bold text-brand transition active:scale-[0.97]"
-            >
-              تفعيل
-            </button>
-          )}
+          ) : null}
         </div>
         <p className="mt-2 text-xs leading-6 text-muted">
           سيصلك إشعار نظام حقيقي في الموعد المحدد أعلاه، ويظهر أعلى الشاشة مثل
           إشعارات واتساب تمامًا، ويسجَّل في لوحة الإشعارات داخل التطبيق.
         </p>
+        {permission !== "granted" ? (
+          <button
+            onClick={enable}
+            className="mt-3 rounded-xl border border-brand/30 bg-brand/10 px-6 py-2.5 text-xs font-bold text-brand transition active:scale-[0.97]"
+          >
+            تفعيل الإشعارات
+          </button>
+        ) : null}
       </motion.section>
     </main>
   );

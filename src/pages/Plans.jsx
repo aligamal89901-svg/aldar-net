@@ -50,16 +50,14 @@ function Plans() {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: "easeOut" }}
-        className="mb-5 flex items-center gap-4 rounded-2xl border border-ink/8 bg-white p-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
+        className="relative mb-5 overflow-hidden rounded-3xl border border-brand/25 bg-gradient-to-b from-brand/10 to-white p-5 text-center"
       >
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-brand/10">
-          <LottieIcon data={plansHeroAnim} className="h-14 w-14" />
+        <div className="mx-auto flex h-28 w-28 items-center justify-center">
+          <LottieIcon data={plansHeroAnim} className="h-28 w-28" />
         </div>
-        <div>
-          <div className="text-base font-extrabold text-ink">كرات الدار نت</div>
-          <div className="mt-1 text-xs leading-6 text-muted">
-            فئات واضحة وأسعار ثابتة، وكل كرت يصلك جاهزًا للتفعيل من صفحة تسجيل الدخول.
-          </div>
+        <div className="mt-2 text-base font-extrabold text-ink">كرات الدار نت</div>
+        <div className="mt-1 text-[11px] leading-6 text-muted">
+          فئات واضحة وأسعار ثابتة، وكل كرت يصلك جاهزًا للتفعيل من صفحة تسجيل الدخول.
         </div>
       </motion.section>
 
@@ -88,7 +86,7 @@ function Plans() {
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.08 * i + 0.05, duration: 0.35, ease: "easeOut" }}
-              className={`relative flex flex-col rounded-3xl border p-5 ${
+              className={`relative flex flex-col items-center rounded-3xl border p-5 text-center ${
                 plan.tag
                   ? "border-brand/30 bg-brand/5"
                   : "border-ink/8 bg-white shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
@@ -101,25 +99,25 @@ function Plans() {
                 </span>
               ) : null}
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-3xl font-extrabold text-ink">{plan.gb}</span>
-                  <span className="text-[11px] font-bold text-muted">قيقا</span>
-                </div>
-                <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-brand/10">
-                  <LottieIcon data={plansDataAnim} className="h-9 w-9" />
-                </div>
+              <div className="flex h-20 w-20 items-center justify-center">
+                <LottieIcon data={plansDataAnim} className="h-20 w-20" />
               </div>
 
-              <div className="mt-4 flex items-end gap-1.5 border-t border-ink/5 pt-3">
-                <span className="text-2xl font-extrabold text-ink">{plan.price}</span>
+              <div className="mt-1 flex items-baseline gap-1.5">
+                <span className="text-3xl font-extrabold text-ink">{plan.gb}</span>
+                <span className="text-[11px] font-bold text-muted">قيقا</span>
+              </div>
+
+              <div className="mt-2 flex items-end gap-1.5">
+                <span className="text-2xl font-extrabold text-brand">{plan.price}</span>
                 <span className="pb-0.5 text-[11px] font-bold text-muted">ريال</span>
-                <span className="ms-auto rounded-full bg-brand/10 px-2.5 py-1 text-[10px] font-bold text-brand">
-                  {plan.days}
-                </span>
               </div>
 
-              <ul className="mt-4 flex flex-col gap-2">
+              <span className="mt-2 inline-flex w-fit rounded-full bg-brand/10 px-3 py-1 text-[10px] font-bold text-brand">
+                {plan.days}
+              </span>
+
+              <ul className="mt-4 flex w-full flex-col gap-2 text-right">
                 {[`${plan.gb} قيقا نت`, `صلاحية ${plan.days}`, "تفعيل فوري من صفحة تسجيل الدخول"].map(
                   (f) => (
                     <li key={f} className="flex items-center gap-2 text-[11px] font-semibold text-muted">
