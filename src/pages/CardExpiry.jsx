@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { CalendarCheck, CheckCircle2 } from "lucide-react";
+import { CalendarCheck, CheckCircle2, Trash2 } from "lucide-react";
 import SectionTitle from "../components/SectionTitle";
 import LottieIcon from "../components/LottieIcon";
 import { requestNotificationPermission } from "../utils/notify";
@@ -89,6 +89,18 @@ function CardExpiry() {
     } catch {}
   };
 
+  const clearAll = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+    setDate("");
+    setSaved("");
+    saveLead({ value: "3", unit: "days" });
+    setLead({ value: "3", unit: "days" });
+    setReminderAt(reminderDateText());
+    checkReminder();
+  };
+
   const saveLeadSettings = () => {
     saveLead(lead);
     setReminderAt(reminderDateText());
@@ -131,6 +143,15 @@ function CardExpiry() {
           <div className={`mt-1 text-sm font-semibold ${status.tone}`}>{status.text}</div>
           {saved ? (
             <div className="mt-2 text-[11px] text-muted">تاريخ الانتهاء: {saved}</div>
+          ) : null}
+          {saved ? (
+            <button
+              onClick={clearAll}
+              className="mt-3 flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-bold text-red-500 transition active:scale-[0.96]"
+            >
+              <Trash2 size={12} />
+              حذف البيانات وبدء صفحة جديدة
+            </button>
           ) : null}
         </div>
       </motion.section>
