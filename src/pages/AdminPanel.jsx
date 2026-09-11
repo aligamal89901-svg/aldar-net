@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
-import { Plus, Trash2, Edit3, LogOut, PackageX, Gift, Package, BookOpen } from "lucide-react";
+import { Plus, Trash2, Edit3, LogOut, PackageX, Gift, Package, BookOpen, ArrowRight } from "lucide-react";
 
 function AdminPanel({ onBack }) {
   const [tab, setTab] = useState("plans");
@@ -128,7 +128,7 @@ function AdminPanel({ onBack }) {
   };
 
   const inputCls =
-    "rounded-xl border border-ink/10 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-brand/40 focus:bg-white";
+    "rounded-xl border border-brand/15 bg-brand/5 px-4 py-2.5 text-sm text-ink outline-none transition focus:border-brand/40 focus:bg-white";
 
   const tabBtn = (id, icon, label) => {
     const Icon = icon;
@@ -136,7 +136,9 @@ function AdminPanel({ onBack }) {
       <button
         onClick={() => setTab(id)}
         className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-[11px] font-bold transition active:scale-[0.97] ${
-          tab === id ? "bg-brand text-white" : "border border-ink/8 bg-white text-muted"
+          tab === id
+            ? "bg-gradient-to-l from-brand to-brand-2 text-white shadow-[0_6px_16px_rgba(8,145,178,0.3)]"
+            : "border border-brand/15 bg-white text-muted"
         }`}
       >
         <Icon size={14} />
@@ -148,6 +150,13 @@ function AdminPanel({ onBack }) {
   return (
     <main className="mx-auto w-full max-w-[900px] flex-1 px-4 pt-5 pb-7">
       <div className="mb-4 flex items-center justify-between">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 rounded-xl border border-ink/8 bg-white px-3.5 py-2 text-xs font-bold text-ink shadow-[0_4px_14px_rgba(15,23,42,0.04)] transition active:scale-[0.97]"
+        >
+          <ArrowRight size={15} />
+          رجوع
+        </button>
         <div className="text-base font-extrabold text-ink">لوحة المدير</div>
         <button
           onClick={logout}
@@ -158,7 +167,7 @@ function AdminPanel({ onBack }) {
         </button>
       </div>
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex gap-2 rounded-2xl border border-brand/15 bg-gradient-to-l from-brand/5 to-white p-1.5">
         {tabBtn("plans", Package, "الفئات")}
         {tabBtn("offers", Gift, "العروض")}
         {tabBtn("knowledge", BookOpen, "المعرفة")}
@@ -166,8 +175,8 @@ function AdminPanel({ onBack }) {
 
       {tab === "plans" ? (
         <>
-          <section className="rounded-2xl border border-ink/8 bg-white p-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
-            <div className="text-sm font-bold text-ink">
+          <section className="rounded-2xl border border-brand/15 bg-gradient-to-b from-white to-brand/5 p-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
+            <div className="text-sm font-extrabold text-ink">
               {planEditId ? "تعديل فئة" : "إضافة فئة جديدة"}
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
@@ -203,7 +212,7 @@ function AdminPanel({ onBack }) {
             <button
               onClick={savePlan}
               disabled={!planForm.price || !planForm.gb || !planForm.days}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-bold text-white transition active:scale-[0.97] disabled:opacity-40"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-brand to-brand-2 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(8,145,178,0.3)] transition active:scale-[0.97] disabled:opacity-40"
             >
               <Plus size={16} />
               {planEditId ? "حفظ التعديل" : "إضافة"}
@@ -214,7 +223,7 @@ function AdminPanel({ onBack }) {
                   setPlanEditId(null);
                   setPlanForm({ price: "", gb: "", days: "", tag: "" });
                 }}
-                className="mt-2 w-full rounded-xl border border-ink/10 bg-slate-50 py-2 text-xs font-bold text-muted transition active:scale-[0.97]"
+                className="mt-2 w-full rounded-xl border border-ink/10 bg-white py-2 text-xs font-bold text-muted transition active:scale-[0.97]"
               >
                 إلغاء التعديل
               </button>
@@ -222,10 +231,10 @@ function AdminPanel({ onBack }) {
           </section>
 
           <section className="mt-4">
-            <div className="mb-2 text-sm font-bold text-ink">الفئات الحالية ({plans.length})</div>
+            <div className="mb-2 text-sm font-extrabold text-ink">الفئات الحالية ({plans.length})</div>
             {plans.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-ink/15 bg-white/60 py-10 text-center">
-                <PackageX size={24} className="text-muted" />
+              <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-brand/20 bg-brand/5 py-10 text-center">
+                <PackageX size={24} className="text-brand" />
                 <div className="text-xs text-muted">لا توجد فئات بعد</div>
               </div>
             ) : (
@@ -233,19 +242,19 @@ function AdminPanel({ onBack }) {
                 {plans.map((p) => (
                   <div
                     key={p.id}
-                    className="flex items-center gap-3 rounded-2xl border border-ink/8 bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
+                    className="flex items-center gap-3 rounded-2xl border border-brand/15 bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
                   >
                     <div className="flex-1">
-                      <div className="text-sm font-bold text-ink">
+                      <div className="text-sm font-extrabold text-ink">
                         {p.price} ريال — {p.gb} قيقا — {p.days}
                       </div>
                       {p.tag ? (
-                        <div className="mt-1 text-[10px] font-bold text-brand">{p.tag}</div>
+                        <div className="mt-1 text-[10px] font-extrabold text-brand">{p.tag}</div>
                       ) : null}
                     </div>
                     <button
                       onClick={() => editPlan(p)}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand transition active:scale-[0.95]"
+                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/15 text-brand transition active:scale-[0.95]"
                     >
                       <Edit3 size={16} />
                     </button>
@@ -263,8 +272,8 @@ function AdminPanel({ onBack }) {
         </>
       ) : tab === "offers" ? (
         <>
-          <section className="rounded-2xl border border-ink/8 bg-white p-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
-            <div className="text-sm font-bold text-ink">
+          <section className="rounded-2xl border border-amber-500/20 bg-gradient-to-b from-white to-amber-50/50 p-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
+            <div className="text-sm font-extrabold text-ink">
               {offerEditId ? "تعديل عرض" : "إضافة عرض جديد"}
             </div>
             <input
@@ -291,7 +300,7 @@ function AdminPanel({ onBack }) {
             <button
               onClick={saveOffer}
               disabled={!offerForm.title || !offerForm.body}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-bold text-white transition active:scale-[0.97] disabled:opacity-40"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-amber-500 to-amber-600 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(245,158,11,0.3)] transition active:scale-[0.97] disabled:opacity-40"
             >
               <Plus size={16} />
               {offerEditId ? "حفظ التعديل" : "إضافة"}
@@ -302,7 +311,7 @@ function AdminPanel({ onBack }) {
                   setOfferEditId(null);
                   setOfferForm({ title: "", body: "", tag: "" });
                 }}
-                className="mt-2 w-full rounded-xl border border-ink/10 bg-slate-50 py-2 text-xs font-bold text-muted transition active:scale-[0.97]"
+                className="mt-2 w-full rounded-xl border border-ink/10 bg-white py-2 text-xs font-bold text-muted transition active:scale-[0.97]"
               >
                 إلغاء التعديل
               </button>
@@ -310,10 +319,10 @@ function AdminPanel({ onBack }) {
           </section>
 
           <section className="mt-4">
-            <div className="mb-2 text-sm font-bold text-ink">العروض الحالية ({offers.length})</div>
+            <div className="mb-2 text-sm font-extrabold text-ink">العروض الحالية ({offers.length})</div>
             {offers.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-ink/15 bg-white/60 py-10 text-center">
-                <Gift size={24} className="text-muted" />
+              <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-amber-500/25 bg-amber-50/50 py-10 text-center">
+                <Gift size={24} className="text-amber-500" />
                 <div className="text-xs text-muted">لا توجد عروض بعد</div>
               </div>
             ) : (
@@ -321,18 +330,18 @@ function AdminPanel({ onBack }) {
                 {offers.map((o) => (
                   <div
                     key={o.id}
-                    className="flex items-center gap-3 rounded-2xl border border-ink/8 bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
+                    className="flex items-center gap-3 rounded-2xl border border-amber-500/15 bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
                   >
                     <div className="flex-1">
-                      <div className="text-sm font-bold text-ink">{o.title}</div>
+                      <div className="text-sm font-extrabold text-ink">{o.title}</div>
                       <div className="mt-1 text-[11px] leading-5 text-muted">{o.body}</div>
                       {o.tag ? (
-                        <div className="mt-1 text-[10px] font-bold text-brand">{o.tag}</div>
+                        <div className="mt-1 text-[10px] font-extrabold text-amber-500">{o.tag}</div>
                       ) : null}
                     </div>
                     <button
                       onClick={() => editOffer(o)}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand transition active:scale-[0.95]"
+                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 transition active:scale-[0.95]"
                     >
                       <Edit3 size={16} />
                     </button>
@@ -350,8 +359,8 @@ function AdminPanel({ onBack }) {
         </>
       ) : (
         <>
-          <section className="rounded-2xl border border-ink/8 bg-white p-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
-            <div className="text-sm font-bold text-ink">
+          <section className="rounded-2xl border border-brand/15 bg-gradient-to-b from-white to-brand/5 p-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
+            <div className="text-sm font-extrabold text-ink">
               {knowEditId ? "تعديل معرفة" : "إضافة معرفة جديدة"}
             </div>
             <div className="mt-1 text-[10px] leading-5 text-muted">
@@ -374,7 +383,7 @@ function AdminPanel({ onBack }) {
             <button
               onClick={saveKnow}
               disabled={!knowForm.title || !knowForm.body}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-bold text-white transition active:scale-[0.97] disabled:opacity-40"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-brand to-brand-2 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(8,145,178,0.3)] transition active:scale-[0.97] disabled:opacity-40"
             >
               <Plus size={16} />
               {knowEditId ? "حفظ التعديل" : "إضافة"}
@@ -385,7 +394,7 @@ function AdminPanel({ onBack }) {
                   setKnowEditId(null);
                   setKnowForm({ title: "", body: "" });
                 }}
-                className="mt-2 w-full rounded-xl border border-ink/10 bg-slate-50 py-2 text-xs font-bold text-muted transition active:scale-[0.97]"
+                className="mt-2 w-full rounded-xl border border-ink/10 bg-white py-2 text-xs font-bold text-muted transition active:scale-[0.97]"
               >
                 إلغاء التعديل
               </button>
@@ -393,12 +402,12 @@ function AdminPanel({ onBack }) {
           </section>
 
           <section className="mt-4">
-            <div className="mb-2 text-sm font-bold text-ink">
+            <div className="mb-2 text-sm font-extrabold text-ink">
               المعارف الحالية ({knowledge.length})
             </div>
             {knowledge.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-ink/15 bg-white/60 py-10 text-center">
-                <BookOpen size={24} className="text-muted" />
+              <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-brand/20 bg-brand/5 py-10 text-center">
+                <BookOpen size={24} className="text-brand" />
                 <div className="text-xs text-muted">لا توجد معارف بعد</div>
               </div>
             ) : (
@@ -406,15 +415,15 @@ function AdminPanel({ onBack }) {
                 {knowledge.map((k) => (
                   <div
                     key={k.id}
-                    className="flex items-center gap-3 rounded-2xl border border-ink/8 bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
+                    className="flex items-center gap-3 rounded-2xl border border-brand/15 bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
                   >
                     <div className="flex-1">
-                      <div className="text-sm font-bold text-ink">{k.title}</div>
+                      <div className="text-sm font-extrabold text-ink">{k.title}</div>
                       <div className="mt-1 text-[11px] leading-5 text-muted">{k.body}</div>
                     </div>
                     <button
                       onClick={() => editKnow(k)}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand transition active:scale-[0.95]"
+                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/15 text-brand transition active:scale-[0.95]"
                     >
                       <Edit3 size={16} />
                     </button>

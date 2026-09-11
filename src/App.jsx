@@ -153,7 +153,7 @@ function App() {
               <AdminPanel onBack={backFromAdmin} />
             </AuthGuard>
           ) : page === "ai" ? (
-            <AIChat onBack={backFromAI} />
+            <AIChat onBack={backFromAI} onNavigate={setPage} />
           ) : (
             <CurrentComponent onNavigate={setPage} />
           )}
