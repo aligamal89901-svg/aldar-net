@@ -2,9 +2,16 @@
 import Tesseract from "tesseract.js";
 import * as pdfjsLib from "pdfjs-dist";
 
-// إعداد Worker ليشير إلى الملف المحلي في public/pdfjs/
-// هذا ضروري جداً ليعمل على Vercel و Termux بدون مشاكل CORS
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
+// إعداد Worker ليشير إلى المسار الصحيح ديناميكياً (يدعم GitHub Pages)
+const getWorkerSrc = () => {
+  if (window.location.hostname.includes('github.io')) {
+    const repoName = window.location.pathname.split('/')[1];
+    return `/${repoName}/pdfjs/pdf.worker.min.mjs`;
+  }
+  return '/pdfjs/pdf.worker.min.mjs';
+};
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = getWorkerSrc();
 
 // الحساب الرسمي الذي يجب أن يكون المستلم (من ملف السند)
 const OFFICIAL_ACCOUNT = "254187788";
@@ -14,11 +21,10 @@ const OFFICIAL_ACCOUNT = "254187788";
  */
 async function pdfToImages(pdfFile) {
   const arrayBuffer = await pdfFile.arrayBuffer();
-  // استخدام workerTransport لضمان العمل في المتصفح
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const images = [];
 
-  // نقرأ أول صفحتين فقط لتسريع العملية وتوفير الموارد
+  // نقرأ أول صفحتين فقط لتسريع العملية
   const pagesToRead = Math.min(pdf.numPages, 2);
 
   for (let i = 1; i <= pagesToRead; i++) {
@@ -97,22 +103,19 @@ export function extractReceiptData(text) {
   const cleanText = text.replace(/\s+/g, ' ');
 
   // 1. استخراج رقم الإشعار (نمط: 8-361685608)
-  // البحث عن رقم مكون من جزأين مفصولين بشرطة
   const notifMatch = cleanText.match(/(\d{1,2}-\d{6,12})/);
   if (notifMatch) {
     data.notificationNumber = notifMatch[1];
   }
 
   // 2. استخراج المبلغ (نمط: [ 118000])
-  // بناءً على الملف: "[ 118000]" أو أي رقم كبير بين أقواس
+  // بناءً على الملف: "[ 118000]"
   const amountMatch = cleanText.match(/\[\s*(\d+)\s*\]/) || cleanText.match(/([\d,]{4,})/);
   if (amountMatch) {
-    // إزالة الفواصل وتحويل لرقم صحيح
     data.amount = parseInt(amountMatch[1].replace(/,/g, ""), 10);
   }
 
   // 3. استخراج التاريخ (نمط: 07-08-2026 أو 2026/08/07)
-  // الملف يحتوي على التنسيقين، نأخذ أي واحد نجده
   const dateMatch = cleanText.match(/(\d{2}-\d{2}-\d{4})/) || cleanText.match(/(\d{4}\/\d{2}\/\d{2})/);
   if (dateMatch) {
     data.date = dateMatch[1];
@@ -124,10 +127,8 @@ export function extractReceiptData(text) {
   }
 
   // 5. استخراج الحساب المرسل (أي رقم حساب آخر غير الرسمي)
-  // نبحث عن كل أرقام الحسابات المحتملة (تبدأ بـ 254 وطولها 9 أرقام)
   const allAccounts = cleanText.match(/(254\d{6,9})/g);
   if (allAccounts) {
-    // نأخذ الرقم الذي ليس هو الحساب الرسمي
     data.fromAccount = allAccounts.find((acc) => acc !== OFFICIAL_ACCOUNT) || allAccounts[0];
   }
 
@@ -181,9 +182,7 @@ export function validateReceipt(data, expectedAmount) {
     const now = new Date();
     const hoursDiff = (now - receiptDate) / (1000 * 60 * 60);
 
-    // السماح بسندات حتى 48 ساعة سابقة
-    // ملاحظة: إذا كان تاريخ السند 2026 واليوم 2024، سيظهر تحذير "تاريخ مستقبلي"
-    // للتجربة، سنتجاهل الخطأ إذا كان التاريخ مستقبلياً ونكتفي بتحذير
+    // السماح بسندات حتى 48 ساعة سابقة أو مستقبلية (للتجربة)
     if (hoursDiff > 48) {
        if (hoursDiff < -24) {
          warnings.push("⚠️ تاريخ السند في المستقبل (ربما تاريخ تجريبي؟)");
