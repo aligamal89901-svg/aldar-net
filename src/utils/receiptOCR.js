@@ -1,93 +1,46 @@
-// src/utils/receiptOCR.js
-import Tesseract from "tesseract.js";
-import * as pdfjsLib from "pdfjs-dist";
-
-// إعداد Worker ليشير إلى المسار الصحيح ديناميكياً (يدعم GitHub Pages)
-const getWorkerSrc = () => {
-  if (window.location.hostname.includes('github.io')) {
-    const repoName = window.location.pathname.split('/')[1];
-    return `/${repoName}/pdfjs/pdf.worker.min.mjs`;
-  }
-  return '/pdfjs/pdf.worker.min.mjs';
-};
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = getWorkerSrc();
-
-// الحساب الرسمي الذي يجب أن يكون المستلم (من ملف السند)
+// src/utils/receiptOCR.js — يستدعي سيرفر Vercel بدل OCR الجوال
+const RECEIPT_API = "https://aldar-ai-proxy.vercel.app/api/receipt";
 const OFFICIAL_ACCOUNT = "254187788";
 
 /**
- * تحويل ملف PDF إلى مصفوفة من الصور (Canvas)
- */
-async function pdfToImages(pdfFile) {
-  const arrayBuffer = await pdfFile.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const images = [];
-
-  // نقرأ أول صفحتين فقط لتسريع العملية
-  const pagesToRead = Math.min(pdf.numPages, 2);
-
-  for (let i = 1; i <= pagesToRead; i++) {
-    const page = await pdf.getPage(i);
-    // scale 2.0 يعطي دقة عالية كافية لقراءة النصوص الصغيرة والمقلوبة
-    const viewport = page.getViewport({ scale: 2.0 });
-    const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    const ctx = canvas.getContext("2d");
-    
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    images.push(canvas);
-  }
-
-  return images;
-}
-
-/**
- * الدالة الرئيسية: استخراج النص من ملف (صورة أو PDF)
+ * قراءة النص من PDF عبر السيرفر
+ * يعيد: { ok, text } أو { ok: false, reason }
  */
 export async function extractTextFromFile(file) {
-  if (file.type === "application/pdf") {
-    console.log("📄 بدء معالجة ملف PDF...");
-    try {
-      const images = await pdfToImages(file);
-      let fullText = "";
+  // نقبل PDF فقط — الصور تروح مراجعة يدوية
+  if (file.type !== "application/pdf") {
+    return { ok: false, reason: "not_pdf" };
+  }
 
-      for (let i = 0; i < images.length; i++) {
-        console.log(`🔍 قراءة الصفحة ${i + 1}...`);
-        const result = await Tesseract.recognize(images[i], "ara+eng", {
-          logger: (m) => {
-            if (m.status === "recognizing text") {
-              console.log(`   التقدم: ${Math.round(m.progress * 100)}%`);
-            }
-          },
-        });
-        fullText += result.data.text + "\n";
-      }
+  const base64 = await fileToBase64(file);
 
-      console.log("📝 النص المستخرج الكامل:", fullText);
-      return fullText;
-    } catch (err) {
-      console.error("Error processing PDF:", err);
-      throw new Error("فشل في قراءة ملف PDF: " + err.message);
-    }
-  } else {
-    console.log("🖼️ بدء معالجة صورة...");
-    const result = await Tesseract.recognize(file, "ara+eng", {
-      logger: (m) => {
-        if (m.status === "recognizing text") {
-          console.log(`   التقدم: ${Math.round(m.progress * 100)}%`);
-        }
-      },
+  try {
+    const res = await fetch(RECEIPT_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ base64, type: file.type }),
     });
-    console.log("📝 النص المستخرج:", result.data.text);
-    return result.data.text;
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    return { ok: false, reason: "network_error", message: err.message };
   }
 }
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result.split(",")[1];
+      resolve(result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 /**
- * استخراج البيانات الهيكلية من النص الخام
- * تم تحسين Regex بناءً على محتوى ملف "تنزيل.pdf" الفعلي
+ * استخراج البيانات من النص
  */
 export function extractReceiptData(text) {
   const data = {
@@ -99,103 +52,72 @@ export function extractReceiptData(text) {
     rawText: text,
   };
 
-  // تنظيف النص من المسافات الزائدة والسطور الجديدة لتسهيل البحث
-  const cleanText = text.replace(/\s+/g, ' ');
+  const cleanText = (text || "").replace(/\s+/g, " ");
 
-  // 1. استخراج رقم الإشعار (نمط: 8-361685608)
+  // رقم الإشعار
   const notifMatch = cleanText.match(/(\d{1,2}-\d{6,12})/);
-  if (notifMatch) {
-    data.notificationNumber = notifMatch[1];
-  }
+  if (notifMatch) data.notificationNumber = notifMatch[1];
 
-  // 2. استخراج المبلغ (نمط: [ 118000])
-  // بناءً على الملف: "[ 118000]"
+  // المبلغ
   const amountMatch = cleanText.match(/\[\s*(\d+)\s*\]/) || cleanText.match(/([\d,]{4,})/);
   if (amountMatch) {
     data.amount = parseInt(amountMatch[1].replace(/,/g, ""), 10);
   }
 
-  // 3. استخراج التاريخ (نمط: 07-08-2026 أو 2026/08/07)
+  // التاريخ
   const dateMatch = cleanText.match(/(\d{2}-\d{2}-\d{4})/) || cleanText.match(/(\d{4}\/\d{2}\/\d{2})/);
-  if (dateMatch) {
-    data.date = dateMatch[1];
-  }
+  if (dateMatch) data.date = dateMatch[1];
 
-  // 4. التحقق من الحساب المستلم (الحساب الرسمي)
+  // الحساب المستلم (الرسمي)
   if (cleanText.includes(OFFICIAL_ACCOUNT)) {
     data.toAccount = OFFICIAL_ACCOUNT;
   }
 
-  // 5. استخراج الحساب المرسل (أي رقم حساب آخر غير الرسمي)
+  // الحساب المرسل
   const allAccounts = cleanText.match(/(254\d{6,9})/g);
   if (allAccounts) {
     data.fromAccount = allAccounts.find((acc) => acc !== OFFICIAL_ACCOUNT) || allAccounts[0];
   }
 
-  console.log("📊 البيانات المستخرجة:", data);
   return data;
 }
 
 /**
- * التحقق من صحة البيانات المستخرجة مقابل شروط النظام
+ * التحقق من صحة البيانات
  */
 export function validateReceipt(data, expectedAmount) {
   const errors = [];
   const warnings = [];
 
-  // 1. التحقق من المبلغ
   if (!data.amount) {
-    errors.push("❌ لم يتم العثور على المبلغ في السند");
+    errors.push("لم يتم العثور على المبلغ في السند");
   } else if (expectedAmount && data.amount !== expectedAmount) {
-    // ملاحظة هامة: تأكد أن سعر الفئة في لوحة المدير هو 118000 ليتطابق مع هذا السند
-    errors.push(`❌ المبلغ (${data.amount}) لا يطابق سعر الفئة المطلوب (${expectedAmount})`);
-  } else {
-    console.log("✅ المبلغ مطابق");
+    errors.push(`المبلغ (${data.amount}) لا يطابق سعر الفئة (${expectedAmount})`);
   }
 
-  // 2. التحقق من الحساب المستلم
   if (!data.toAccount) {
-    errors.push("❌ الحساب المستلم ليس الحساب الرسمي المعتمد (254187788)");
-  } else {
-    console.log("✅ الحساب المستلم صحيح");
+    errors.push("الحساب المستلم ليس الحساب الرسمي");
   }
 
-  // 3. التحقق من رقم الإشعار
   if (!data.notificationNumber) {
-    warnings.push("⚠️ لم يتم العثور على رقم إشعار واضح (قد يؤثر على منع التكرار)");
-  } else {
-    console.log("✅ رقم الإشعار موجود:", data.notificationNumber);
+    warnings.push("لم يتم العثور على رقم إشعار واضح");
   }
 
-  // 4. التحقق من التاريخ
   if (!data.date) {
-    warnings.push("⚠️ لم يتم العثور على تاريخ واضح");
+    warnings.push("لم يتم العثور على تاريخ واضح");
   } else {
     let receiptDate;
     if (data.date.includes("/")) {
-      receiptDate = new Date(data.date); // YYYY/MM/DD
+      receiptDate = new Date(data.date);
     } else {
       const parts = data.date.split("-");
-      receiptDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`); // DD-MM-YYYY -> YYYY-MM-DD
+      receiptDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
     }
-
-    const now = new Date();
-    const hoursDiff = (now - receiptDate) / (1000 * 60 * 60);
-
-    // السماح بسندات حتى 48 ساعة سابقة أو مستقبلية (للتجربة)
-    if (hoursDiff > 48) {
-       if (hoursDiff < -24) {
-         warnings.push("⚠️ تاريخ السند في المستقبل (ربما تاريخ تجريبي؟)");
-       } else {
-         errors.push(`❌ السند قديم جداً (${Math.round(hoursDiff)} ساعة مضت). الحد الأقصى 48 ساعة.`);
-       }
-    } else {
-      console.log("✅ التاريخ مقبول");
+    const hoursDiff = (Date.now() - receiptDate.getTime()) / (1000 * 60 * 60);
+    if (hoursDiff > 48 && hoursDiff < 8760) {
+      errors.push(`السند قديم (${Math.round(hoursDiff)} ساعة)`);
     }
   }
 
-  const isValid = errors.length === 0;
-  console.log(isValid ? "✅ التحقق ناجح" : "❌ التحقق فشل", { errors, warnings });
-
-  return { errors, warnings, isValid };
+  return { errors, warnings, isValid: errors.length === 0 };
 }

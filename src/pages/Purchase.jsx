@@ -2,8 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   ArrowRight, CheckCircle2, AlertCircle, ChevronDown, X, Package, 
-  AlertTriangle, FileText, Image as ImageIcon, Loader2, ShieldCheck, 
-  Clock, Brain, Zap 
+  AlertTriangle, FileText, Loader2, ShieldCheck, Clock, Brain, Zap 
 } from "lucide-react";
 import { 
   collection, addDoc, onSnapshot, getDocs, doc, 
@@ -15,16 +14,13 @@ import { extractTextFromFile, extractReceiptData, validateReceipt } from "../uti
 function Purchase({ onBack, plans }) {
   const [form, setForm] = useState({ name: "", phone: "", planId: "", note: "" });
   const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState("");
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
   const [showPlanPicker, setShowPlanPicker] = useState(false);
   const [stock, setStock] = useState({});
-  
-  // حالات المعالجة الذكية
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processStep, setProcessStep] = useState(""); // قراءة، تحقق، سحب
+  const [processStep, setProcessStep] = useState("");
   const [processResult, setProcessResult] = useState(null);
 
   useEffect(() => {
@@ -43,19 +39,7 @@ function Purchase({ onBack, plans }) {
   const handleFile = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    
-    // قبول الصور و PDF
-    if (!f.type.startsWith("image/") && f.type !== "application/pdf") {
-      setError("يرجى إرفاق صورة (JPG/PNG) أو ملف PDF للسند");
-      return;
-    }
-    
     setFile(f);
-    if (f.type.startsWith("image/")) {
-      setPreview(URL.createObjectURL(f));
-    } else {
-      setPreview(""); // لا توجد معاينة مباشرة للـ PDF في img tag
-    }
     setError("");
     setProcessResult(null);
   };
@@ -72,10 +56,10 @@ function Purchase({ onBack, plans }) {
     setError("");
     setIsProcessing(true);
     setProcessResult(null);
-    setProcessStep("reading"); // الخطوة 1: قراءة
+    setProcessStep("reading");
 
     try {
-      // 1) فحص المخزون مبدئياً
+      // 1) فحص المخزون
       const cardsSnap = await getDocs(collection(db, "availableCards"));
       const available = cardsSnap.docs.filter((d) => {
         const data = d.data();
@@ -88,143 +72,125 @@ function Purchase({ onBack, plans }) {
         return;
       }
 
-      // 2) قراءة السند (OCR) - يدعم PDF وصور
-      const text = await extractTextFromFile(file);
+      // 2) قراءة السند عبر السيرفر
+      const serverResult = await extractTextFromFile(file);
+
+      // 3) إذا لم يكن PDF نصي → مراجعة يدوية
+      if (!serverResult.ok) {
+        setProcessStep("manual_review");
+        const base64 = await fileToBase64(file);
+        const reason = 
+          serverResult.reason === "not_pdf" ? "الصور تحتاج مراجعة يدوية — ارفع PDF من تطبيق البنك" :
+          serverResult.reason === "scanned_pdf" ? "الـ PDF ممسوح ضوئياً — يحتاج مراجعة يدوية" :
+          "تعذر قراءة الملف — تم إرساله للمدير";
+        
+        await addDoc(collection(db, "purchaseRequests"), {
+          name: form.name, phone: form.phone, planId: form.planId, note: form.note,
+          receipt: base64, receiptName: file.name, receiptType: file.type,
+          status: "pending", createdAt: Date.now(),
+          needsManualReview: true, reviewReason: reason,
+        });
+        
+        setProcessResult({ status: "manual_review", reason, extracted: null, validation: null });
+        setDone(true);
+        setIsProcessing(false);
+        return;
+      }
+
+      // 4) استخراج + تحقق
+      setProcessStep("extracting");
+      const extracted = extractReceiptData(serverResult.text);
       
-      // 3) استخراج البيانات
-      setProcessStep("extracting"); // الخطوة 2: استخراج
-      const extracted = extractReceiptData(text);
-      
-      // 4) التحقق الذكي
-      setProcessStep("validating"); // الخطوة 3: تحقق
+      setProcessStep("validating");
       const validation = validateReceipt(extracted, selectedPlan ? Number(selectedPlan.price) : null);
 
-      // 5) التحقق من تكرار رقم الإشعار
+      // 5) منع تكرار رقم الإشعار
       if (extracted.notificationNumber) {
         const usedSnap = await getDocs(collection(db, "usedNotifications"));
         const isUsed = usedSnap.docs.some((d) => d.data().notificationNumber === extracted.notificationNumber);
         if (isUsed) {
           setProcessResult({
             status: "rejected",
-            reason: "رقم الإشعار هذا تم استخدامه مسبقًا في عملية شراء أخرى.",
+            reason: "رقم الإشعار هذا تم استخدامه مسبقًا",
             extracted, validation
           });
-          setIsProcessing(false);
           setDone(true);
+          setIsProcessing(false);
           return;
         }
       }
 
       // 6) اتخاذ القرار
       if (validation.isValid) {
-        // ✅ نجاح تام -> سحب فوري
-        setProcessStep("approving"); // الخطوة 4: سحب
-        
-        // ترتيب الكروت حسب الأقدمية
+        setProcessStep("approving");
         const sortedAvailable = available.sort((a, b) => (a.data().createdAt || 0) - (b.data().createdAt || 0));
         const cardDoc = sortedAvailable[0];
         const cardData = cardDoc.data();
 
-        // تجهيز الملف للرفع (Base64) لحفظه في السجل
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const base64 = reader.result.split(",")[1];
-          
-          try {
-            // إنشاء طلب مبدئي
-            const reqRef = await addDoc(collection(db, "purchaseRequests"), {
-              name: form.name,
-              phone: form.phone,
-              planId: form.planId,
-              note: form.note,
-              receipt: base64,
-              receiptName: file.name,
-              receiptType: file.type,
-              status: "pending", // مؤقت
-              createdAt: Date.now(),
-            });
+        const base64 = await fileToBase64(file);
+        const reqRef = await addDoc(collection(db, "purchaseRequests"), {
+          name: form.name, phone: form.phone, planId: form.planId, note: form.note,
+          receipt: base64, receiptName: file.name, receiptType: file.type,
+          status: "pending", createdAt: Date.now(),
+        });
 
-            // تنفيذ العملية الذرية (Transaction)
-            await runTransaction(db, async (tx) => {
-              // حذف الكرت من المخزون
-              tx.delete(doc(db, "availableCards", cardDoc.id));
-              
-              // تحديث الطلب إلى موافق عليه تلقائياً
-              tx.update(reqRef, {
-                status: "approved",
-                cardCode: cardData.code,
-                cardId: cardDoc.id,
-                approvedAt: Date.now(),
-                autoApproved: true,
-                extractedData: extracted,
-              });
-
-              // تسجيل رقم الإشعار لمنع التكرار
-              if (extracted.notificationNumber) {
-                tx.set(doc(db, "usedNotifications", extracted.notificationNumber.replace(/-/g, "_")), {
-                  notificationNumber: extracted.notificationNumber,
-                  usedAt: Date.now(),
-                  customerName: form.name,
-                  customerPhone: form.phone,
-                  amount: extracted.amount,
-                });
-              }
+        await runTransaction(db, async (tx) => {
+          tx.delete(doc(db, "availableCards", cardDoc.id));
+          tx.update(reqRef, {
+            status: "approved", cardCode: cardData.code, cardId: cardDoc.id,
+            approvedAt: Date.now(), autoApproved: true, extractedData: extracted,
+          });
+          if (extracted.notificationNumber) {
+            tx.set(doc(db, "usedNotifications", extracted.notificationNumber.replace(/-/g, "_")), {
+              notificationNumber: extracted.notificationNumber,
+              usedAt: Date.now(), customerName: form.name, customerPhone: form.phone,
+              amount: extracted.amount,
             });
-
-            setProcessResult({
-              status: "approved",
-              cardCode: cardData.code,
-              reason: "تم التحقق من السند وسحب الكرت بنجاح.",
-              extracted, validation
-            });
-            setDone(true);
-          } catch (err) {
-            setError("فشل في إتمام العملية: " + err.message);
-            setIsProcessing(false);
           }
-        };
-        reader.readAsDataURL(file);
+        });
 
+        setProcessResult({
+          status: "approved", cardCode: cardData.code,
+          reason: "تم التحقق من السند وسحب الكرت بنجاح",
+          extracted, validation
+        });
+        setDone(true);
       } else {
-        // ⚠️ يحتاج مراجعة يدوية
         setProcessStep("manual_review");
-        
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const base64 = reader.result.split(",")[1];
-          await addDoc(collection(db, "purchaseRequests"), {
-            name: form.name,
-            phone: form.phone,
-            planId: form.planId,
-            note: form.note,
-            receipt: base64,
-            receiptName: file.name,
-            receiptType: file.type,
-            status: "pending",
-            createdAt: Date.now(),
-            needsManualReview: true,
-            extractedData: extracted,
-            validationErrors: validation.errors,
-          });
-          
-          setProcessResult({
-            status: "manual_review",
-            reason: validation.errors.join(" - ") || "تعذر التحقق التلقائي، تم إرساله للمدير.",
-            extracted, validation
-          });
-          setDone(true);
-        };
-        reader.readAsDataURL(file);
+        const base64 = await fileToBase64(file);
+        await addDoc(collection(db, "purchaseRequests"), {
+          name: form.name, phone: form.phone, planId: form.planId, note: form.note,
+          receipt: base64, receiptName: file.name, receiptType: file.type,
+          status: "pending", createdAt: Date.now(),
+          needsManualReview: true, extractedData: extracted,
+          validationErrors: validation.errors,
+        });
+        setProcessResult({
+          status: "manual_review",
+          reason: validation.errors.join(" - ") || "تعذر التحقق التلقائي",
+          extracted, validation
+        });
+        setDone(true);
       }
 
+      setIsProcessing(false);
     } catch (err) {
       console.error(err);
-      setError("حدث خطأ أثناء معالجة السند: " + err.message);
+      setError("حدث خطأ أثناء المعالجة: " + err.message);
       setIsProcessing(false);
     }
   };
 
-  // --- شاشات النتائج ---
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(",")[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // --- شاشة النتائج ---
   if (done) {
     const isApproved = processResult?.status === "approved";
     const isManual = processResult?.status === "manual_review";
@@ -247,7 +213,7 @@ function Purchase({ onBack, plans }) {
                 <ShieldCheck size={40} />
               </div>
               <h2 className="text-xl font-black text-green-700">تمت الموافقة الفورية! ✅</h2>
-              <p className="mt-2 text-sm text-muted">تم التحقق من سند الدفع وسحب الكرت تلقائياً.</p>
+              <p className="mt-2 text-sm text-muted">تم التحقق من سند الدفع وسحب الكرت تلقائيًا.</p>
               
               <div className="mt-6 rounded-2xl border-2 border-dashed border-green-300 bg-white p-4">
                 <div className="text-xs font-bold text-muted uppercase tracking-wider">كود التفعيل الخاص بك</div>
@@ -275,7 +241,7 @@ function Purchase({ onBack, plans }) {
                 <Clock size={40} />
               </div>
               <h2 className="text-xl font-black text-amber-700">قيد المراجعة اليدوية</h2>
-              <p className="mt-2 text-sm text-muted">تعذر التحقق التلقائي الكامل، تم إرسال طلبك للمدير للمراجعة.</p>
+              <p className="mt-2 text-sm text-muted">تم إرسال طلبك للمدير للمراجعة.</p>
               
               <div className="mt-4 rounded-xl bg-amber-100/50 p-3 text-xs text-amber-800 text-right leading-relaxed">
                 <strong>السبب:</strong> {processResult.reason}
@@ -293,7 +259,7 @@ function Purchase({ onBack, plans }) {
               <h2 className="text-xl font-black text-red-700">تم رفض الطلب</h2>
               <p className="mt-2 text-sm text-muted">{processResult.reason}</p>
               
-              <button onClick={() => { setDone(false); setProcessResult(null); }} className="mt-8 w-full rounded-xl bg-slate-800 py-3 text-sm font-bold text-white transition active:scale-95">
+              <button onClick={() => { setDone(false); setProcessResult(null); setFile(null); }} className="mt-8 w-full rounded-xl bg-slate-800 py-3 text-sm font-bold text-white transition active:scale-95">
                 حاول مرة أخرى
               </button>
             </div>
@@ -314,7 +280,6 @@ function Purchase({ onBack, plans }) {
         <span className="w-16" />
       </div>
 
-      {/* بانر الميزة الجديدة */}
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="mb-5 overflow-hidden rounded-2xl bg-gradient-to-r from-brand to-brand-2 p-[1px] shadow-lg">
         <div className="flex items-center gap-3 rounded-2xl bg-white p-4">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
@@ -322,7 +287,7 @@ function Purchase({ onBack, plans }) {
           </div>
           <div>
             <h3 className="text-sm font-bold text-ink">شراء ذكي وفوري ⚡</h3>
-            <p className="text-[10px] text-muted leading-tight">ارفع السند (PDF أو صورة) وسيتم التحقق منه وتسليمك الكرت فوراً بدون انتظار.</p>
+            <p className="text-[10px] text-muted leading-tight">ارفع ملف PDF من تطبيق البنك وسيتم التحقق منه وتسليمك الكرت فورًا.</p>
           </div>
         </div>
       </motion.div>
@@ -356,51 +321,47 @@ function Purchase({ onBack, plans }) {
           )}
         </button>
 
-        <div className="mb-4 mt-6 text-sm font-bold text-ink">3. سند الدفع (PDF أو صورة)</div>
+        <div className="mb-4 mt-6 text-sm font-bold text-ink">3. سند الدفع (PDF فقط)</div>
         {!file ? (
           <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 transition hover:border-brand hover:bg-brand/5 active:scale-[0.98]">
-            <div className="flex gap-4 text-slate-400">
-              <FileText size={32} />
-              <ImageIcon size={32} />
-            </div>
+            <FileText size={32} className="text-slate-400" />
             <span className="text-sm font-bold text-slate-600">اضغط لإرفاق السند</span>
-            <span className="text-[10px] text-slate-400">يدعم ملفات PDF وصور JPG/PNG</span>
-            <input type="file" accept="image/jpeg,image/png,image/jpg,application/pdf" onChange={handleFile} className="hidden" />
+            <span className="text-[10px] text-slate-400">ملفات PDF الأصلية من تطبيق البنك فقط</span>
+            <input type="file" accept="application/pdf" onChange={handleFile} className="hidden" />
           </label>
         ) : (
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 overflow-hidden">
-                {file.type === "application/pdf" ? (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100 text-red-600">
-                    <FileText size={20} />
-                  </div>
-                ) : (
-                  <div className="h-10 w-10 overflow-hidden rounded-lg border border-slate-200">
-                    <img src={preview} alt="preview" className="h-full w-full object-cover" />
-                  </div>
-                )}
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100 text-red-600">
+                  <FileText size={20} />
+                </div>
                 <div className="min-w-0">
                   <div className="truncate text-xs font-bold text-ink">{file.name}</div>
                   <div className="text-[10px] text-slate-400">{(file.size / 1024).toFixed(1)} KB</div>
                 </div>
               </div>
-              <button onClick={() => { setFile(null); setPreview(""); }} disabled={isProcessing} className="rounded-lg p-2 text-red-500 hover:bg-red-50 disabled:opacity-50">
+              <button onClick={() => setFile(null)} disabled={isProcessing} className="rounded-lg p-2 text-red-500 hover:bg-red-50 disabled:opacity-50">
                 <X size={18} />
               </button>
             </div>
           </div>
         )}
 
-        {/* مؤشر المعالجة */}
         {isProcessing && (
           <div className="mt-6 rounded-xl bg-brand/5 p-4">
             <div className="mb-2 flex items-center justify-between text-xs font-bold text-brand">
               <span className="flex items-center gap-2">
                 <Loader2 size={14} className="animate-spin" />
-                جاري المعالجة الذكية...
+                جاري المعالجة...
               </span>
-              <span>{processStep === 'reading' ? 'قراءة السند' : processStep === 'extracting' ? 'استخراج البيانات' : processStep === 'validating' ? 'التحقق' : 'إصدار الكرت'}</span>
+              <span>
+                {processStep === 'reading' ? 'قراءة السند' : 
+                 processStep === 'extracting' ? 'استخراج البيانات' : 
+                 processStep === 'validating' ? 'التحقق' : 
+                 processStep === 'approving' ? 'إصدار الكرت' : 
+                 'مراجعة'}
+              </span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-brand/10">
               <motion.div 
@@ -432,7 +393,6 @@ function Purchase({ onBack, plans }) {
         </button>
       </section>
 
-      {/* قائمة اختيار الباقة (Modal) */}
       <AnimatePresence>
         {showPlanPicker && (
           <>
