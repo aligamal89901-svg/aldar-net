@@ -1,4 +1,4 @@
-const AI_PROXY_URL = "https://aldar-ai.mhndbarbwed.workers.dev";
+const AI_PROXY_URL = "https://aldar-ai-proxy.vercel.app/api/ai";
 
 export async function askAI({ question, history, knowledge, live, mode, signal }) {
   const controller = new AbortController();
