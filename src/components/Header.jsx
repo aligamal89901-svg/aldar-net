@@ -1,16 +1,21 @@
 import { useEffect, useState } from "react";
-import { Bell, Settings } from "lucide-react";
+import { Bell, Shield } from "lucide-react";
 import LottieIcon from "./LottieIcon";
 import logoAnim from "../assets/lottie/logo.json";
 import { unreadCount } from "../utils/notifyStore";
+import { broadcastUnread } from "../utils/broadcasts";
 
-function Header({ onBellClick, onSettingsClick }) {
-  const [unread, setUnread] = useState(unreadCount());
+function Header({ onBellClick, onAdminClick }) {
+  const [unread, setUnread] = useState(unreadCount() + broadcastUnread());
 
   useEffect(() => {
-    const handler = () => setUnread(unreadCount());
+    const handler = () => setUnread(unreadCount() + broadcastUnread());
     window.addEventListener("aldar-notifications-changed", handler);
-    return () => window.removeEventListener("aldar-notifications-changed", handler);
+    window.addEventListener("aldar-broadcasts-changed", handler);
+    return () => {
+      window.removeEventListener("aldar-notifications-changed", handler);
+      window.removeEventListener("aldar-broadcasts-changed", handler);
+    };
   }, []);
 
   return (
@@ -26,6 +31,13 @@ function Header({ onBellClick, onSettingsClick }) {
         </div>
 
         <button
+          onClick={onAdminClick}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-ink/8 bg-white text-muted shadow-[0_4px_14px_rgba(15,23,42,0.04)] transition active:scale-[0.95]"
+        >
+          <Shield size={18} />
+        </button>
+
+        <button
           onClick={onBellClick}
           className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-ink/8 bg-white text-muted shadow-[0_4px_14px_rgba(15,23,42,0.04)] transition active:scale-[0.95]"
         >
@@ -35,13 +47,6 @@ function Header({ onBellClick, onSettingsClick }) {
               {unread}
             </span>
           ) : null}
-        </button>
-
-        <button
-          onClick={onSettingsClick}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-ink/8 bg-white text-muted shadow-[0_4px_14px_rgba(15,23,42,0.04)] transition active:scale-[0.95]"
-        >
-          <Settings size={18} />
         </button>
       </div>
     </header>

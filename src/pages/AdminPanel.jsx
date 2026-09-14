@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { motion } from "motion/react";
 import {
   collection,
   addDoc,
@@ -11,9 +12,24 @@ import {
 } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
-import { Plus, Trash2, Edit3, LogOut, PackageX, Gift, Package, BookOpen, ArrowRight } from "lucide-react";
+import {
+  Plus, Trash2, Edit3, LogOut, PackageX, Gift, Package, BookOpen, ArrowRight,
+  Megaphone, Send, CreditCard, ShoppingCart, Users,
+} from "lucide-react";
 
-function AdminPanel({ onBack }) {
+const KIND_OPTIONS = [
+  { value: "general", label: "عام" },
+  { value: "maintenance", label: "صيانة" },
+  { value: "offer", label: "عرض" },
+  { value: "alert", label: "تنبيه" },
+];
+
+function kindLabel(kind) {
+  const found = KIND_OPTIONS.find((k) => k.value === kind);
+  return found ? found.label : "عام";
+}
+
+function AdminPanel({ onBack, onNavigate }) {
   const [tab, setTab] = useState("plans");
 
   const [plans, setPlans] = useState([]);
@@ -27,6 +43,10 @@ function AdminPanel({ onBack }) {
   const [knowledge, setKnowledge] = useState([]);
   const [knowForm, setKnowForm] = useState({ title: "", body: "" });
   const [knowEditId, setKnowEditId] = useState(null);
+
+  const [broadcasts, setBroadcasts] = useState([]);
+  const [bcForm, setBcForm] = useState({ title: "", body: "", kind: "general" });
+  const [bcSending, setBcSending] = useState(false);
 
   useEffect(() => {
     const q = query(collection(db, "plans"), orderBy("price", "asc"));
@@ -45,6 +65,13 @@ function AdminPanel({ onBack }) {
   useEffect(() => {
     return onSnapshot(collection(db, "knowledge"), (snap) =>
       setKnowledge(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, "broadcasts"), orderBy("createdAt", "desc"));
+    return onSnapshot(q, (snap) =>
+      setBroadcasts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
   }, []);
 
@@ -122,6 +149,29 @@ function AdminPanel({ onBack }) {
     }
   };
 
+  const sendBroadcast = async () => {
+    if (!bcForm.title || !bcForm.body || bcSending) return;
+    setBcSending(true);
+    try {
+      await addDoc(collection(db, "broadcasts"), {
+        title: bcForm.title,
+        body: bcForm.body,
+        kind: bcForm.kind,
+        createdAt: Date.now(),
+      });
+      setBcForm({ title: "", body: "", kind: "general" });
+    } catch (err) {
+      alert("تعذر إرسال الإشعار، حاول مجددًا");
+    }
+    setBcSending(false);
+  };
+
+  const removeBroadcast = async (id) => {
+    if (confirm("حذف هذا الإشعار من كل العملاء؟")) {
+      await deleteDoc(doc(db, "broadcasts", id));
+    }
+  };
+
   const logout = async () => {
     await signOut(auth);
     onBack();
@@ -167,10 +217,55 @@ function AdminPanel({ onBack }) {
         </button>
       </div>
 
+      <div className="mb-4 grid grid-cols-3 gap-3">
+        <motion.button
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.3 }}
+          onClick={() => {
+            window.location.hash = "admin-cards";
+            if (onNavigate) onNavigate("admin-cards");
+          }}
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-brand/25 bg-gradient-to-l from-brand/10 to-white p-4 shadow-[0_4px_14px_rgba(8,145,178,0.08)] transition active:scale-[0.98]"
+        >
+          <CreditCard size={20} className="text-brand" />
+          <span className="text-[10px] font-extrabold text-brand">إضافة كروت</span>
+        </motion.button>
+
+        <motion.button
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.3 }}
+          onClick={() => {
+            window.location.hash = "admin-orders";
+            if (onNavigate) onNavigate("admin-orders");
+          }}
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-amber-500/25 bg-gradient-to-l from-amber-500/10 to-white p-4 shadow-[0_4px_14px_rgba(245,158,11,0.08)] transition active:scale-[0.98]"
+        >
+          <ShoppingCart size={20} className="text-amber-500" />
+          <span className="text-[10px] font-extrabold text-amber-600">طلبات الشراء</span>
+        </motion.button>
+
+        <motion.button
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.3 }}
+          onClick={() => {
+            window.location.hash = "admin-clients";
+            if (onNavigate) onNavigate("admin-clients");
+          }}
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-green-500/25 bg-gradient-to-l from-green-500/10 to-white p-4 shadow-[0_4px_14px_rgba(34,197,94,0.08)] transition active:scale-[0.98]"
+        >
+          <Users size={20} className="text-green-500" />
+          <span className="text-[10px] font-extrabold text-green-600">العملاء</span>
+        </motion.button>
+      </div>
+
       <div className="mb-4 flex gap-2 rounded-2xl border border-brand/15 bg-gradient-to-l from-brand/5 to-white p-1.5">
         {tabBtn("plans", Package, "الفئات")}
         {tabBtn("offers", Gift, "العروض")}
         {tabBtn("knowledge", BookOpen, "المعرفة")}
+        {tabBtn("broadcasts", Megaphone, "الإشعارات")}
       </div>
 
       {tab === "plans" ? (
@@ -180,51 +275,17 @@ function AdminPanel({ onBack }) {
               {planEditId ? "تعديل فئة" : "إضافة فئة جديدة"}
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <input
-                type="number"
-                placeholder="السعر"
-                value={planForm.price}
-                onChange={(e) => setPlanForm({ ...planForm, price: e.target.value })}
-                className={inputCls}
-              />
-              <input
-                type="number"
-                placeholder="القيقا"
-                value={planForm.gb}
-                onChange={(e) => setPlanForm({ ...planForm, gb: e.target.value })}
-                className={inputCls}
-              />
-              <input
-                type="text"
-                placeholder="المدة (مثل: شهر)"
-                value={planForm.days}
-                onChange={(e) => setPlanForm({ ...planForm, days: e.target.value })}
-                className={inputCls}
-              />
-              <input
-                type="text"
-                placeholder="الشارة (اختياري)"
-                value={planForm.tag}
-                onChange={(e) => setPlanForm({ ...planForm, tag: e.target.value })}
-                className={inputCls}
-              />
+              <input type="number" placeholder="السعر" value={planForm.price} onChange={(e) => setPlanForm({ ...planForm, price: e.target.value })} className={inputCls} />
+              <input type="number" placeholder="القيقا" value={planForm.gb} onChange={(e) => setPlanForm({ ...planForm, gb: e.target.value })} className={inputCls} />
+              <input type="text" placeholder="المدة (مثل: شهر)" value={planForm.days} onChange={(e) => setPlanForm({ ...planForm, days: e.target.value })} className={inputCls} />
+              <input type="text" placeholder="الشارة (اختياري)" value={planForm.tag} onChange={(e) => setPlanForm({ ...planForm, tag: e.target.value })} className={inputCls} />
             </div>
-            <button
-              onClick={savePlan}
-              disabled={!planForm.price || !planForm.gb || !planForm.days}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-brand to-brand-2 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(8,145,178,0.3)] transition active:scale-[0.97] disabled:opacity-40"
-            >
+            <button onClick={savePlan} disabled={!planForm.price || !planForm.gb || !planForm.days} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-brand to-brand-2 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(8,145,178,0.3)] transition active:scale-[0.97] disabled:opacity-40">
               <Plus size={16} />
               {planEditId ? "حفظ التعديل" : "إضافة"}
             </button>
             {planEditId ? (
-              <button
-                onClick={() => {
-                  setPlanEditId(null);
-                  setPlanForm({ price: "", gb: "", days: "", tag: "" });
-                }}
-                className="mt-2 w-full rounded-xl border border-ink/10 bg-white py-2 text-xs font-bold text-muted transition active:scale-[0.97]"
-              >
+              <button onClick={() => { setPlanEditId(null); setPlanForm({ price: "", gb: "", days: "", tag: "" }); }} className="mt-2 w-full rounded-xl border border-ink/10 bg-white py-2 text-xs font-bold text-muted transition active:scale-[0.97]">
                 إلغاء التعديل
               </button>
             ) : null}
@@ -240,30 +301,13 @@ function AdminPanel({ onBack }) {
             ) : (
               <div className="flex flex-col gap-2">
                 {plans.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center gap-3 rounded-2xl border border-brand/15 bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
-                  >
+                  <div key={p.id} className="flex items-center gap-3 rounded-2xl border border-brand/15 bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
                     <div className="flex-1">
-                      <div className="text-sm font-extrabold text-ink">
-                        {p.price} ريال — {p.gb} قيقا — {p.days}
-                      </div>
-                      {p.tag ? (
-                        <div className="mt-1 text-[10px] font-extrabold text-brand">{p.tag}</div>
-                      ) : null}
+                      <div className="text-sm font-extrabold text-ink">{p.price} ريال — {p.gb} قيقا — {p.days}</div>
+                      {p.tag ? <div className="mt-1 text-[10px] font-extrabold text-brand">{p.tag}</div> : null}
                     </div>
-                    <button
-                      onClick={() => editPlan(p)}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/15 text-brand transition active:scale-[0.95]"
-                    >
-                      <Edit3 size={16} />
-                    </button>
-                    <button
-                      onClick={() => removePlan(p.id)}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-500 transition active:scale-[0.95]"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <button onClick={() => editPlan(p)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/15 text-brand transition active:scale-[0.95]"><Edit3 size={16} /></button>
+                    <button onClick={() => removePlan(p.id)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-500 transition active:scale-[0.95]"><Trash2 size={16} /></button>
                   </div>
                 ))}
               </div>
@@ -273,51 +317,18 @@ function AdminPanel({ onBack }) {
       ) : tab === "offers" ? (
         <>
           <section className="rounded-2xl border border-amber-500/20 bg-gradient-to-b from-white to-amber-50/50 p-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
-            <div className="text-sm font-extrabold text-ink">
-              {offerEditId ? "تعديل عرض" : "إضافة عرض جديد"}
-            </div>
-            <input
-              type="text"
-              placeholder="عنوان العرض"
-              value={offerForm.title}
-              onChange={(e) => setOfferForm({ ...offerForm, title: e.target.value })}
-              className={`mt-3 w-full ${inputCls}`}
-            />
-            <textarea
-              placeholder="تفاصيل العرض"
-              value={offerForm.body}
-              onChange={(e) => setOfferForm({ ...offerForm, body: e.target.value })}
-              rows={3}
-              className={`mt-2 w-full resize-none ${inputCls}`}
-            />
-            <input
-              type="text"
-              placeholder="الشارة (اختياري، مثل: محدود)"
-              value={offerForm.tag}
-              onChange={(e) => setOfferForm({ ...offerForm, tag: e.target.value })}
-              className={`mt-2 w-full ${inputCls}`}
-            />
-            <button
-              onClick={saveOffer}
-              disabled={!offerForm.title || !offerForm.body}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-amber-500 to-amber-600 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(245,158,11,0.3)] transition active:scale-[0.97] disabled:opacity-40"
-            >
+            <div className="text-sm font-extrabold text-ink">{offerEditId ? "تعديل عرض" : "إضافة عرض جديد"}</div>
+            <input type="text" placeholder="عنوان العرض" value={offerForm.title} onChange={(e) => setOfferForm({ ...offerForm, title: e.target.value })} className={`mt-3 w-full ${inputCls}`} />
+            <textarea placeholder="تفاصيل العرض" value={offerForm.body} onChange={(e) => setOfferForm({ ...offerForm, body: e.target.value })} rows={3} className={`mt-2 w-full resize-none ${inputCls}`} />
+            <input type="text" placeholder="الشارة (اختياري، مثل: محدود)" value={offerForm.tag} onChange={(e) => setOfferForm({ ...offerForm, tag: e.target.value })} className={`mt-2 w-full ${inputCls}`} />
+            <button onClick={saveOffer} disabled={!offerForm.title || !offerForm.body} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-amber-500 to-amber-600 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(245,158,11,0.3)] transition active:scale-[0.97] disabled:opacity-40">
               <Plus size={16} />
               {offerEditId ? "حفظ التعديل" : "إضافة"}
             </button>
             {offerEditId ? (
-              <button
-                onClick={() => {
-                  setOfferEditId(null);
-                  setOfferForm({ title: "", body: "", tag: "" });
-                }}
-                className="mt-2 w-full rounded-xl border border-ink/10 bg-white py-2 text-xs font-bold text-muted transition active:scale-[0.97]"
-              >
-                إلغاء التعديل
-              </button>
+              <button onClick={() => { setOfferEditId(null); setOfferForm({ title: "", body: "", tag: "" }); }} className="mt-2 w-full rounded-xl border border-ink/10 bg-white py-2 text-xs font-bold text-muted transition active:scale-[0.97]">إلغاء التعديل</button>
             ) : null}
           </section>
-
           <section className="mt-4">
             <div className="mb-2 text-sm font-extrabold text-ink">العروض الحالية ({offers.length})</div>
             {offers.length === 0 ? (
@@ -328,29 +339,55 @@ function AdminPanel({ onBack }) {
             ) : (
               <div className="flex flex-col gap-2">
                 {offers.map((o) => (
-                  <div
-                    key={o.id}
-                    className="flex items-center gap-3 rounded-2xl border border-amber-500/15 bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
-                  >
+                  <div key={o.id} className="flex items-center gap-3 rounded-2xl border border-amber-500/15 bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
                     <div className="flex-1">
                       <div className="text-sm font-extrabold text-ink">{o.title}</div>
                       <div className="mt-1 text-[11px] leading-5 text-muted">{o.body}</div>
-                      {o.tag ? (
-                        <div className="mt-1 text-[10px] font-extrabold text-amber-500">{o.tag}</div>
-                      ) : null}
+                      {o.tag ? <div className="mt-1 text-[10px] font-extrabold text-amber-500">{o.tag}</div> : null}
                     </div>
-                    <button
-                      onClick={() => editOffer(o)}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 transition active:scale-[0.95]"
-                    >
-                      <Edit3 size={16} />
-                    </button>
-                    <button
-                      onClick={() => removeOffer(o.id)}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-500 transition active:scale-[0.95]"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <button onClick={() => editOffer(o)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 transition active:scale-[0.95]"><Edit3 size={16} /></button>
+                    <button onClick={() => removeOffer(o.id)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-500 transition active:scale-[0.95]"><Trash2 size={16} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      ) : tab === "broadcasts" ? (
+        <>
+          <section className="rounded-2xl border border-brand/15 bg-gradient-to-b from-white to-brand/5 p-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
+            <div className="text-sm font-extrabold text-ink">إرسال إشعار لكل العملاء</div>
+            <div className="mt-1 text-[10px] leading-5 text-muted">يصل لحظيًا لكل عميل فتح التطبيق.</div>
+            <input type="text" placeholder="عنوان الإشعار (مثل: تنبيه صيانة)" value={bcForm.title} onChange={(e) => setBcForm({ ...bcForm, title: e.target.value })} className={`mt-3 w-full ${inputCls}`} />
+            <textarea placeholder="نص الإشعار الكامل" value={bcForm.body} onChange={(e) => setBcForm({ ...bcForm, body: e.target.value })} rows={3} className={`mt-2 w-full resize-none ${inputCls}`} />
+            <select value={bcForm.kind} onChange={(e) => setBcForm({ ...bcForm, kind: e.target.value })} className={`mt-2 w-full ${inputCls}`}>
+              {KIND_OPTIONS.map((k) => (<option key={k.value} value={k.value}>{k.label}</option>))}
+            </select>
+            <button onClick={sendBroadcast} disabled={!bcForm.title || !bcForm.body || bcSending} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-brand to-brand-2 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(8,145,178,0.3)] transition active:scale-[0.97] disabled:opacity-40">
+              <Send size={16} className="-scale-x-100" />
+              {bcSending ? "جارٍ الإرسال…" : "إرسال الآن"}
+            </button>
+          </section>
+          <section className="mt-4">
+            <div className="mb-2 text-sm font-extrabold text-ink">سجل الإشعارات المرسلة ({broadcasts.length})</div>
+            {broadcasts.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-brand/20 bg-brand/5 py-10 text-center">
+                <Megaphone size={24} className="text-brand" />
+                <div className="text-xs text-muted">لم ترسل أي إشعار بعد</div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {broadcasts.map((b) => (
+                  <div key={b.id} className="flex items-center gap-3 rounded-2xl border border-brand/15 bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-extrabold text-ink">{b.title}</div>
+                        <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[9px] font-extrabold text-brand">{kindLabel(b.kind)}</span>
+                      </div>
+                      <div className="mt-1 text-[11px] leading-5 text-muted">{b.body}</div>
+                      <div className="mt-1 text-[10px] font-semibold text-slate-400">{new Date(b.createdAt || 0).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}</div>
+                    </div>
+                    <button onClick={() => removeBroadcast(b.id)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-500 transition active:scale-[0.95]"><Trash2 size={16} /></button>
                   </div>
                 ))}
               </div>
@@ -360,51 +397,20 @@ function AdminPanel({ onBack }) {
       ) : (
         <>
           <section className="rounded-2xl border border-brand/15 bg-gradient-to-b from-white to-brand/5 p-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
-            <div className="text-sm font-extrabold text-ink">
-              {knowEditId ? "تعديل معرفة" : "إضافة معرفة جديدة"}
-            </div>
-            <div className="mt-1 text-[10px] leading-5 text-muted">
-              كل معرفة تضيفها هنا يتعلمها المساعد الذكي فورًا ويجيب منها بدقة.
-            </div>
-            <input
-              type="text"
-              placeholder="عنوان المعرفة (مثل: تفعيل الكرت)"
-              value={knowForm.title}
-              onChange={(e) => setKnowForm({ ...knowForm, title: e.target.value })}
-              className={`mt-3 w-full ${inputCls}`}
-            />
-            <textarea
-              placeholder="نص المعرفة (الإجابة الكاملة التي يعتمد عليها المساعد)"
-              value={knowForm.body}
-              onChange={(e) => setKnowForm({ ...knowForm, body: e.target.value })}
-              rows={4}
-              className={`mt-2 w-full resize-none ${inputCls}`}
-            />
-            <button
-              onClick={saveKnow}
-              disabled={!knowForm.title || !knowForm.body}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-brand to-brand-2 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(8,145,178,0.3)] transition active:scale-[0.97] disabled:opacity-40"
-            >
+            <div className="text-sm font-extrabold text-ink">{knowEditId ? "تعديل معرفة" : "إضافة معرفة جديدة"}</div>
+            <div className="mt-1 text-[10px] leading-5 text-muted">كل معرفة تضيفها هنا يتعلمها المساعد الذكي فورًا ويجيب منها بدقة.</div>
+            <input type="text" placeholder="عنوان المعرفة (مثل: تفعيل الكرت)" value={knowForm.title} onChange={(e) => setKnowForm({ ...knowForm, title: e.target.value })} className={`mt-3 w-full ${inputCls}`} />
+            <textarea placeholder="نص المعرفة (الإجابة الكاملة التي يعتمد عليها المساعد)" value={knowForm.body} onChange={(e) => setKnowForm({ ...knowForm, body: e.target.value })} rows={4} className={`mt-2 w-full resize-none ${inputCls}`} />
+            <button onClick={saveKnow} disabled={!knowForm.title || !knowForm.body} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-brand to-brand-2 py-2.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(8,145,178,0.3)] transition active:scale-[0.97] disabled:opacity-40">
               <Plus size={16} />
               {knowEditId ? "حفظ التعديل" : "إضافة"}
             </button>
             {knowEditId ? (
-              <button
-                onClick={() => {
-                  setKnowEditId(null);
-                  setKnowForm({ title: "", body: "" });
-                }}
-                className="mt-2 w-full rounded-xl border border-ink/10 bg-white py-2 text-xs font-bold text-muted transition active:scale-[0.97]"
-              >
-                إلغاء التعديل
-              </button>
+              <button onClick={() => { setKnowEditId(null); setKnowForm({ title: "", body: "" }); }} className="mt-2 w-full rounded-xl border border-ink/10 bg-white py-2 text-xs font-bold text-muted transition active:scale-[0.97]">إلغاء التعديل</button>
             ) : null}
           </section>
-
           <section className="mt-4">
-            <div className="mb-2 text-sm font-extrabold text-ink">
-              المعارف الحالية ({knowledge.length})
-            </div>
+            <div className="mb-2 text-sm font-extrabold text-ink">المعارف الحالية ({knowledge.length})</div>
             {knowledge.length === 0 ? (
               <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-brand/20 bg-brand/5 py-10 text-center">
                 <BookOpen size={24} className="text-brand" />
@@ -413,26 +419,13 @@ function AdminPanel({ onBack }) {
             ) : (
               <div className="flex flex-col gap-2">
                 {knowledge.map((k) => (
-                  <div
-                    key={k.id}
-                    className="flex items-center gap-3 rounded-2xl border border-brand/15 bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
-                  >
+                  <div key={k.id} className="flex items-center gap-3 rounded-2xl border border-brand/15 bg-white p-4 shadow-[0_4px_14px_rgba(15,23,42,0.04)]">
                     <div className="flex-1">
                       <div className="text-sm font-extrabold text-ink">{k.title}</div>
                       <div className="mt-1 text-[11px] leading-5 text-muted">{k.body}</div>
                     </div>
-                    <button
-                      onClick={() => editKnow(k)}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/15 text-brand transition active:scale-[0.95]"
-                    >
-                      <Edit3 size={16} />
-                    </button>
-                    <button
-                      onClick={() => removeKnow(k.id)}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-500 transition active:scale-[0.95]"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <button onClick={() => editKnow(k)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/15 text-brand transition active:scale-[0.95]"><Edit3 size={16} /></button>
+                    <button onClick={() => removeKnow(k.id)} className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-500 transition active:scale-[0.95]"><Trash2 size={16} /></button>
                   </div>
                 ))}
               </div>

@@ -55,7 +55,7 @@ function Plans() {
         <div className="mx-auto flex h-28 w-28 items-center justify-center">
           <LottieIcon data={plansHeroAnim} className="h-28 w-28" />
         </div>
-        <div className="mt-2 text-base font-extrabold text-ink">كرات الدار نت</div>
+        <div className="mt-2 text-base font-extrabold text-ink">كروت الدار نت</div>
         <div className="mt-1 text-[11px] leading-6 text-muted">
           فئات واضحة وأسعار ثابتة، وكل كرت يصلك جاهزًا للتفعيل من صفحة تسجيل الدخول.
         </div>

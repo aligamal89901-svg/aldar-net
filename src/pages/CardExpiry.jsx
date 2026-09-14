@@ -5,6 +5,7 @@ import SectionTitle from "../components/SectionTitle";
 import LottieIcon from "../components/LottieIcon";
 import { requestNotificationPermission } from "../utils/notify";
 import { getLead, saveLead, reminderDateText, checkReminder } from "../utils/reminder";
+import { formatRemaining } from "../utils/cardTime";
 import mycardHeroAnim from "../assets/lottie/mycard-hero.json";
 import mycardBellAnim from "../assets/lottie/mycard-bell.json";
 
@@ -18,22 +19,14 @@ function getSavedDate() {
   }
 }
 
-function daysLeft(dateStr) {
-  if (!dateStr) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(dateStr + "T00:00:00");
-  return Math.ceil((target - today) / 86400000);
-}
-
-function Ring({ left }) {
+function Ring({ rem }) {
   const total = 30;
-  const clamped = left === null ? 0 : Math.max(0, Math.min(total, left));
+  const left = rem && !rem.expired ? (rem.days || 0) : 0;
+  const clamped = Math.max(0, Math.min(total, left));
   const ratio = clamped / total;
   const r = 52;
   const c = 2 * Math.PI * r;
-  const color =
-    left === null ? "#94a3b8" : left <= 0 ? "#ef4444" : left <= 3 ? "#f59e0b" : "#0891b2";
+  const color = !rem ? "#94a3b8" : rem.expired ? "#ef4444" : (rem.days === 0 ? "#f59e0b" : "#0891b2");
 
   return (
     <div className="relative h-32 w-32 shrink-0">
@@ -53,9 +46,28 @@ function Ring({ left }) {
           transition={{ duration: 0.9, ease: "easeOut" }}
         />
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl font-extrabold text-ink">{left === null ? "—" : left}</span>
-        <span className="text-[10px] font-semibold text-muted">يوم متبقٍ</span>
+      <div className="absolute inset-0 flex flex-col items-center justify-center px-2 text-center">
+        {!rem ? (
+          <>
+            <span className="text-3xl font-extrabold text-ink">—</span>
+            <span className="text-[10px] font-semibold text-muted">يوم متبقٍ</span>
+          </>
+        ) : rem.expired ? (
+          <>
+            <span className="text-lg font-extrabold text-red-500">انتهى</span>
+            <span className="text-[9px] font-semibold text-muted">الصلاحية</span>
+          </>
+        ) : rem.days === 0 ? (
+          <>
+            <span className="text-xl font-extrabold text-amber-500">{rem.hours}</span>
+            <span className="text-[9px] font-semibold text-muted">ساعة متبقية</span>
+          </>
+        ) : (
+          <>
+            <span className="text-3xl font-extrabold text-ink">{rem.days}</span>
+            <span className="text-[10px] font-semibold text-muted">يوم متبقٍ</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -70,15 +82,15 @@ function CardExpiry() {
     "Notification" in window ? Notification.permission : "unsupported"
   );
 
-  const left = daysLeft(saved);
+  const rem = formatRemaining(saved);
 
   const status = useMemo(() => {
-    if (left === null) return { text: "لم يُحفظ تاريخ بعد", tone: "text-muted" };
-    if (left < 0) return { text: "انتهت صلاحية الكرت", tone: "text-red-500" };
-    if (left === 0) return { text: "ينتهي اليوم", tone: "text-red-500" };
-    if (left <= 3) return { text: "اقترب الانتهاء — جهّز التجديد", tone: "text-amber-500" };
+    if (!rem) return { text: "لم يُحفظ تاريخ بعد", tone: "text-muted" };
+    if (rem.expired) return { text: "انتهت صلاحية الكرت", tone: "text-red-500" };
+    if (rem.days === 0) return { text: rem.text, tone: "text-amber-500" };
+    if (rem.days <= 3) return { text: "اقترب الانتهاء — جهّز التجديد", tone: "text-amber-500" };
     return { text: "الكرت ساري", tone: "text-emerald-500" };
-  }, [left]);
+  }, [rem]);
 
   const save = () => {
     try {
@@ -137,12 +149,17 @@ function CardExpiry() {
         transition={{ delay: 0.07, duration: 0.35, ease: "easeOut" }}
         className="flex items-center gap-5 rounded-2xl border border-ink/8 bg-white p-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)]"
       >
-        <Ring left={left} />
+        <Ring rem={rem} />
         <div className="flex-1">
           <div className="text-base font-extrabold text-ink">حالة الكرت</div>
           <div className={`mt-1 text-sm font-semibold ${status.tone}`}>{status.text}</div>
           {saved ? (
-            <div className="mt-2 text-[11px] text-muted">تاريخ الانتهاء: {saved}</div>
+            <div className="mt-2 text-[11px] text-muted">
+              ينتهي في: {new Date(saved).toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" })}
+            </div>
+          ) : null}
+          {rem && !rem.expired ? (
+            <div className="mt-1 text-[11px] font-bold text-brand">{rem.text}</div>
           ) : null}
           {saved ? (
             <button

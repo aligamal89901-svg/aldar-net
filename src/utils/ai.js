@@ -1,6 +1,6 @@
 const AI_PROXY_URL = "https://aldar-ai.mhndbarbwed.workers.dev";
 
-export async function askAI({ question, history, knowledge, live, signal }) {
+export async function askAI({ question, history, knowledge, live, mode, signal }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 40000);
   const onAbort = () => controller.abort();
@@ -17,6 +17,7 @@ export async function askAI({ question, history, knowledge, live, signal }) {
       body: JSON.stringify({
         question: question,
         today: new Date().toISOString().slice(0, 10),
+        mode: mode || "chat",
         history: (history || []).slice(-4),
         knowledge: knowledge || [],
         live: live || null,
