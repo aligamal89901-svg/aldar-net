@@ -1,6 +1,6 @@
 // src/utils/receiptOCR.js — قراءة السند عبر سيرفر Vercel + تدقيق آلي
 const RECEIPT_API = "https://aldar-ai-proxy.vercel.app/api/receipt";
-const OFFICIAL_ACCOUNT = "254187788";
+const OFFICIAL_ACCOUNT = "254219775";
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
