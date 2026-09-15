@@ -72,8 +72,8 @@ function Purchase({ onBack, plans }) {
         return;
       }
 
-      // 2) قراءة السند عبر السيرفر
-      const serverResult = await extractTextFromFile(file);
+      // 2) قراءة السند عبر السيرفر + التدقيق الآلي
+      const serverResult = await extractTextFromFile(file, Number(selectedPlan.price));
 
       // 3) إذا لم يكن PDF نصي → مراجعة يدوية
       if (!serverResult.ok) {
@@ -97,21 +97,21 @@ function Purchase({ onBack, plans }) {
         return;
       }
 
-      // 4) استخراج + تحقق
+      // 4) استخراج + تحقق صارم
       setProcessStep("extracting");
       const extracted = extractReceiptData(serverResult.text);
       
       setProcessStep("validating");
       const validation = validateReceipt(extracted, selectedPlan ? Number(selectedPlan.price) : null);
 
-      // 5) منع تكرار رقم الإشعار
+      // 5) منع تكرار رقم الإشعار (حرق)
       if (extracted.notificationNumber) {
         const usedSnap = await getDocs(collection(db, "usedNotifications"));
         const isUsed = usedSnap.docs.some((d) => d.data().notificationNumber === extracted.notificationNumber);
         if (isUsed) {
           setProcessResult({
             status: "rejected",
-            reason: "رقم الإشعار هذا تم استخدامه مسبقًا",
+            reason: "رقم الإشعار هذا تم استخدامه مسبقًا — السند محروق",
             extracted, validation
           });
           setDone(true);
@@ -120,8 +120,55 @@ function Purchase({ onBack, plans }) {
         }
       }
 
-      // 6) اتخاذ القرار
-      if (validation.isValid) {
+      // 6) طبقة المدقق الآلي (AI)
+      const audit = serverResult.audit;
+      if (!audit) {
+        setProcessStep("manual_review");
+        const base64 = await fileToBase64(file);
+        await addDoc(collection(db, "purchaseRequests"), {
+          name: form.name, phone: form.phone, planId: form.planId, note: form.note,
+          receipt: base64, receiptName: file.name, receiptType: file.type,
+          status: "pending", createdAt: Date.now(),
+          needsManualReview: true, reviewReason: "تعذر التدقيق الآلي للسند",
+        });
+        setProcessResult({ status: "manual_review", reason: "تعذر التدقيق الآلي — أرسل للمدير", extracted, validation });
+        setDone(true);
+        setIsProcessing(false);
+        return;
+      }
+      if (audit.verdict === "invalid") {
+        setProcessResult({
+          status: "rejected",
+          reason: "السند مرفوض من المدقق الآلي: " + (audit.reasons || []).join("، "),
+          extracted, validation
+        });
+        setDone(true);
+        setIsProcessing(false);
+        return;
+      }
+      if (audit.verdict === "suspicious") {
+        setProcessStep("manual_review");
+        const base64 = await fileToBase64(file);
+        await addDoc(collection(db, "purchaseRequests"), {
+          name: form.name, phone: form.phone, planId: form.planId, note: form.note,
+          receipt: base64, receiptName: file.name, receiptType: file.type,
+          status: "pending", createdAt: Date.now(),
+          needsManualReview: true,
+          reviewReason: "شبهة تزوير: " + (audit.reasons || []).join("، "),
+          audit,
+        });
+        setProcessResult({
+          status: "manual_review",
+          reason: "شبهة تزوير رصدتها المنظومة: " + (audit.reasons || []).join("، "),
+          extracted, validation
+        });
+        setDone(true);
+        setIsProcessing(false);
+        return;
+      }
+
+      // 7) القرار النهائي: القواعد + المدقق معًا
+      if (validation.isValid && audit.verdict === "valid") {
         setProcessStep("approving");
         const sortedAvailable = available.sort((a, b) => (a.data().createdAt || 0) - (b.data().createdAt || 0));
         const cardDoc = sortedAvailable[0];
@@ -138,7 +185,7 @@ function Purchase({ onBack, plans }) {
           tx.delete(doc(db, "availableCards", cardDoc.id));
           tx.update(reqRef, {
             status: "approved", cardCode: cardData.code, cardId: cardDoc.id,
-            approvedAt: Date.now(), autoApproved: true, extractedData: extracted,
+            approvedAt: Date.now(), autoApproved: true, extractedData: extracted, audit,
           });
           if (extracted.notificationNumber) {
             tx.set(doc(db, "usedNotifications", extracted.notificationNumber.replace(/-/g, "_")), {
