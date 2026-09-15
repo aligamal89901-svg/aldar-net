@@ -11,6 +11,31 @@ import {
 import { db } from "../firebase";
 import { extractTextFromFile, extractReceiptData, validateReceipt } from "../utils/receiptOCR";
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// تقسيم السند لقطع صغيرة وتخزينها داخل Firestore (تجاوز حد الميجابايت)
+async function saveReceiptChunks(reqId, file) {
+  const base64 = await fileToBase64(file);
+  const CH = 900000;
+  const total = Math.ceil(base64.length / CH);
+  for (let i = 0; i < total; i++) {
+    await setDoc(doc(db, "receiptChunks", `${reqId}_${i}`), {
+      reqId,
+      index: i,
+      total,
+      data: base64.slice(i * CH, (i + 1) * CH),
+    });
+  }
+  return total;
+}
+
 function Purchase({ onBack, plans }) {
   const [form, setForm] = useState({ name: "", phone: "", planId: "", note: "" });
   const [file, setFile] = useState(null);
@@ -78,18 +103,18 @@ function Purchase({ onBack, plans }) {
       // 3) إذا لم يكن PDF نصي → مراجعة يدوية
       if (!serverResult.ok) {
         setProcessStep("manual_review");
-        const base64 = await fileToBase64(file);
         const reason = 
           serverResult.reason === "not_pdf" ? "الصور تحتاج مراجعة يدوية — ارفع PDF من تطبيق البنك" :
           serverResult.reason === "scanned_pdf" ? "الـ PDF ممسوح ضوئياً — يحتاج مراجعة يدوية" :
           "تعذر قراءة الملف — تم إرساله للمدير";
         
-        await addDoc(collection(db, "purchaseRequests"), {
+        const reqRefM = await addDoc(collection(db, "purchaseRequests"), {
           name: form.name, phone: form.phone, planId: form.planId, note: form.note,
-          receipt: base64, receiptName: file.name, receiptType: file.type,
+          receiptName: file.name, receiptType: file.type,
           status: "pending", createdAt: Date.now(),
           needsManualReview: true, reviewReason: reason,
         });
+        await saveReceiptChunks(reqRefM.id, file);
         
         setProcessResult({ status: "manual_review", reason, extracted: null, validation: null });
         setDone(true);
@@ -104,11 +129,19 @@ function Purchase({ onBack, plans }) {
       setProcessStep("validating");
       const validation = validateReceipt(extracted, selectedPlan ? Number(selectedPlan.price) : null);
 
-      // 5) منع تكرار رقم الإشعار (حرق)
+      // 5) منع تكرار رقم الإشعار (حرق) — مع أرشفة محاولة الغش
       if (extracted.notificationNumber) {
         const usedSnap = await getDocs(collection(db, "usedNotifications"));
         const isUsed = usedSnap.docs.some((d) => d.data().notificationNumber === extracted.notificationNumber);
         if (isUsed) {
+          const reqRefR = await addDoc(collection(db, "purchaseRequests"), {
+            name: form.name, phone: form.phone, planId: form.planId, note: form.note,
+            receiptName: file.name, receiptType: file.type,
+            status: "rejected", createdAt: Date.now(),
+            rejectReason: "رقم الإشعار مستخدم مسبقًا — محاولة إعادة استخدام",
+            extractedData: extracted,
+          });
+          await saveReceiptChunks(reqRefR.id, file);
           setProcessResult({
             status: "rejected",
             reason: "رقم الإشعار هذا تم استخدامه مسبقًا — السند محروق",
@@ -124,19 +157,27 @@ function Purchase({ onBack, plans }) {
       const audit = serverResult.audit;
       if (!audit) {
         setProcessStep("manual_review");
-        const base64 = await fileToBase64(file);
-        await addDoc(collection(db, "purchaseRequests"), {
+        const reqRefM = await addDoc(collection(db, "purchaseRequests"), {
           name: form.name, phone: form.phone, planId: form.planId, note: form.note,
-          receipt: base64, receiptName: file.name, receiptType: file.type,
+          receiptName: file.name, receiptType: file.type,
           status: "pending", createdAt: Date.now(),
           needsManualReview: true, reviewReason: "تعذر التدقيق الآلي للسند",
         });
+        await saveReceiptChunks(reqRefM.id, file);
         setProcessResult({ status: "manual_review", reason: "تعذر التدقيق الآلي — أرسل للمدير", extracted, validation });
         setDone(true);
         setIsProcessing(false);
         return;
       }
       if (audit.verdict === "invalid") {
+        const reqRefR = await addDoc(collection(db, "purchaseRequests"), {
+          name: form.name, phone: form.phone, planId: form.planId, note: form.note,
+          receiptName: file.name, receiptType: file.type,
+          status: "rejected", createdAt: Date.now(),
+          rejectReason: "رفض المدقق الآلي: " + (audit.reasons || []).join("، "),
+          extractedData: extracted, audit,
+        });
+        await saveReceiptChunks(reqRefR.id, file);
         setProcessResult({
           status: "rejected",
           reason: "السند مرفوض من المدقق الآلي: " + (audit.reasons || []).join("، "),
@@ -148,15 +189,15 @@ function Purchase({ onBack, plans }) {
       }
       if (audit.verdict === "suspicious") {
         setProcessStep("manual_review");
-        const base64 = await fileToBase64(file);
-        await addDoc(collection(db, "purchaseRequests"), {
+        const reqRefM = await addDoc(collection(db, "purchaseRequests"), {
           name: form.name, phone: form.phone, planId: form.planId, note: form.note,
-          receipt: base64, receiptName: file.name, receiptType: file.type,
+          receiptName: file.name, receiptType: file.type,
           status: "pending", createdAt: Date.now(),
           needsManualReview: true,
           reviewReason: "شبهة تزوير: " + (audit.reasons || []).join("، "),
           audit,
         });
+        await saveReceiptChunks(reqRefM.id, file);
         setProcessResult({
           status: "manual_review",
           reason: "شبهة تزوير رصدتها المنظومة: " + (audit.reasons || []).join("، "),
@@ -174,10 +215,9 @@ function Purchase({ onBack, plans }) {
         const cardDoc = sortedAvailable[0];
         const cardData = cardDoc.data();
 
-        const base64 = await fileToBase64(file);
         const reqRef = await addDoc(collection(db, "purchaseRequests"), {
           name: form.name, phone: form.phone, planId: form.planId, note: form.note,
-          receipt: base64, receiptName: file.name, receiptType: file.type,
+          receiptName: file.name, receiptType: file.type,
           status: "pending", createdAt: Date.now(),
         });
 
@@ -196,6 +236,8 @@ function Purchase({ onBack, plans }) {
           }
         });
 
+        await saveReceiptChunks(reqRef.id, file);
+
         setProcessResult({
           status: "approved", cardCode: cardData.code,
           reason: "تم التحقق من السند وسحب الكرت بنجاح",
@@ -204,14 +246,14 @@ function Purchase({ onBack, plans }) {
         setDone(true);
       } else {
         setProcessStep("manual_review");
-        const base64 = await fileToBase64(file);
-        await addDoc(collection(db, "purchaseRequests"), {
+        const reqRefM = await addDoc(collection(db, "purchaseRequests"), {
           name: form.name, phone: form.phone, planId: form.planId, note: form.note,
-          receipt: base64, receiptName: file.name, receiptType: file.type,
+          receiptName: file.name, receiptType: file.type,
           status: "pending", createdAt: Date.now(),
           needsManualReview: true, extractedData: extracted,
           validationErrors: validation.errors,
         });
+        await saveReceiptChunks(reqRefM.id, file);
         setProcessResult({
           status: "manual_review",
           reason: validation.errors.join(" - ") || "تعذر التحقق التلقائي",
@@ -227,15 +269,6 @@ function Purchase({ onBack, plans }) {
       setIsProcessing(false);
     }
   };
-
-  function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.split(",")[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
 
   // --- شاشة النتائج ---
   if (done) {

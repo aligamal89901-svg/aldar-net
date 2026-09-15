@@ -11,21 +11,23 @@ function fileToBase64(file) {
   });
 }
 
-// كشف النص المعكوس (مشكلة استخراج PDF) وتصحيحه
+// كشف النص المقلوب (خلل استخراج RTL)
 function isGarbled(t) {
-  return /ﺏﺎﺴﺣ|ﺦﻳﺭﺎﺘﻟﺍ|ﻠﺒﻤﻟﺍ|ﺭﺎﻌﺷ/.test(t || "");
+  return /ﺭﺎﻌﺷ|ﺦﻳﺭﺎﺘ|ﻎﻠﺒﻤ|ﺎﺴﺣ/.test(t || "");
 }
-function normalizeArabic(t) {
-  return (t || "")
-    .split(/\s+/)
-    .map((tok) => (/[\u0600-\u06FF]/.test(tok) ? [...tok].reverse().join("") : tok))
-    .join(" ");
+// القلب الكامل للسلسلة يعيد كل سطر لأصله حرفيًا
+function fixReversed(t) {
+  return [...(t || "")].reverse().join("");
 }
+// توحيد التاريخ بصيغة ISO (يميز 2026-09-15 عن 15-09-2026)
 function normalizeDate(d) {
   if (!d) return null;
   if (d.includes("/")) return d;
   const p = d.split("-");
-  return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : d;
+  if (p.length !== 3) return d;
+  if (p[0].length === 4) return d;              // ISO بالفعل
+  if (p[2].length === 4) return `${p[2]}-${p[1]}-${p[0]}`;
+  return d;
 }
 
 /**
@@ -57,7 +59,7 @@ export async function extractTextFromFile(file, expectedAmount) {
  * استخراج البيانات من النص (فحص موضعي ضد الدس والتزوير)
  */
 export function extractReceiptData(text) {
-  const src = isGarbled(text) ? normalizeArabic(text) : text;
+  const src = isGarbled(text) ? fixReversed(text) : text;
   const cleanText = (src || "").replace(/\s+/g, " ");
 
   const data = {
@@ -71,28 +73,38 @@ export function extractReceiptData(text) {
   };
 
   // رقم الإشعار
-  const notifMatch = cleanText.match(/(\d{1,2}-\d{6,12})/);
+  const notifMatch =
+    cleanText.match(/رقم الإشعار\s*(\d{1,2}-\d{6,12})/) ||
+    cleanText.match(/(\d{1,2}-\d{6,12})/);
   if (notifMatch) data.notificationNumber = notifMatch[1];
 
   // المبلغ
-  const amountMatch = cleanText.match(/\[\s*(\d+)\s*\]/) || cleanText.match(/([\d,]{4,})/);
+  const amountMatch =
+    cleanText.match(/\[\s*(\d+)\s*\]/) ||
+    cleanText.match(/المبلغ\s*(\d[\d,]*)/);
   if (amountMatch) data.amount = parseInt(amountMatch[1].replace(/,/g, ""), 10);
 
   // كل التواريخ (لكشف التعارض)
   data.dates = cleanText.match(/\d{2}-\d{2}-\d{4}|\d{4}\/\d{2}\/\d{2}/g) || [];
   data.date = data.dates[0] || null;
 
-  // المستلم الفعلي = أول رقم بعد عبارة (حساب الى) — فحص موضعي لا ينخدع بالدس
+  // حساب المستلم (خانة الرسمي في قالب البنك): "-رقم X" بعد اسم المستلم
   const toMatch =
     cleanText.match(/حساب الى[^\d]{0,40}(\d{6,})/) ||
-    cleanText.match(/الى\s*حساب[^\d]{0,40}(\d{6,})/);
+    cleanText.match(/الى حساب[^\d]{0,40}(\d{6,})/) ||
+    cleanText.match(/-رقم (\d{6,})/);
   data.toAccount = toMatch ? toMatch[1] : null;
 
-  // الحساب المرسل
+  // حساب المرسل
+  const fromMatch =
+    cleanText.match(/خاص\/?\s*رقم\s*(\d{6,})/) ||
+    cleanText.match(/من حساب[^\d]{0,60}?(\d{6,})/);
   const allAccounts = cleanText.match(/(254\d{6,9})/g);
-  if (allAccounts) {
-    data.fromAccount = allAccounts.find((a) => a !== OFFICIAL_ACCOUNT) || allAccounts[0];
-  }
+  data.fromAccount = fromMatch
+    ? fromMatch[1]
+    : allAccounts
+      ? allAccounts.find((a) => a !== OFFICIAL_ACCOUNT) || allAccounts[0]
+      : null;
 
   return data;
 }
@@ -113,7 +125,7 @@ export function validateReceipt(data, expectedAmount) {
 
   // 2) المستلم الفعلي = الحساب الرسمي بالضبط (فحص موضعي)
   if (data.toAccount !== OFFICIAL_ACCOUNT) {
-    errors.push(`حقل (حساب الى) في السند (${data.toAccount || "غير موجود"}) ليس الحساب الرسمي ${OFFICIAL_ACCOUNT}`);
+    errors.push(`حقل الحساب المستلم في السند (${data.toAccount || "غير موجود"}) ليس الحساب الرسمي ${OFFICIAL_ACCOUNT}`);
   }
 
   // 3) تواريخ متضاربة = تزوير
